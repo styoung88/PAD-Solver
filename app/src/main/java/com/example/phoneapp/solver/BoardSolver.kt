@@ -56,7 +56,7 @@ data class MaximizeColorDamage(val color: OrbColor) : SolveGoal {
 object ColorDamageEstimate {
     fun scoreInSixteenths(analysis: BoardAnalysis, color: OrbColor): Int {
         val comboFactorInQuarters = analysis.comboCount + 3
-        return analysis.matches.asSequence()
+        return analysis.allMatches.asSequence()
             .filter { it.color == color }
             .sumOf { match -> comboFactorInQuarters * (match.size + 1) }
     }
@@ -229,7 +229,7 @@ class BoardSolver {
     }
 
     private fun analyze(cells: IntArray, columns: Int, rows: Int): BoardAnalysis =
-        BoardAnalyzer.analyze(
+        BoardAnalyzer.resolveCascades(
             Board(
                 columns = columns,
                 rows = rows,

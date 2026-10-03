@@ -274,7 +274,13 @@ fun SolutionScreen(
     ) {
         Text("Suggested route", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(6.dp))
-        Text("${solution.comboCount} combos · ${solution.orbMoves} orb moves")
+        val cascadeCount = solution.predictedMatches.cascadeCount
+        val cascadeSummary = when (cascadeCount) {
+            0 -> ""
+            1 -> " · 1 cascade"
+            else -> " · $cascadeCount cascades"
+        }
+        Text("${solution.comboCount} combos · ${solution.orbMoves} orb moves$cascadeSummary")
         Spacer(Modifier.height(16.dp))
         OrbBoard(board = board, matches = solution.predictedMatches, path = solution.path)
         Spacer(Modifier.height(12.dp))

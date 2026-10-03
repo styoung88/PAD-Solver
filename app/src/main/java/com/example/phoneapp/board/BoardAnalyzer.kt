@@ -9,8 +9,13 @@ data class OrbMatch(
 
 data class BoardAnalysis(
     val matches: List<OrbMatch>,
+    /** One list of matches for each simultaneous clear, starting with the first clear. */
+    val cascadeWaves: List<List<OrbMatch>> = listOf(matches),
 ) {
-    val comboCount: Int get() = matches.size
+    /** The first-wave matches plus any combos created by gravity. */
+    val comboCount: Int get() = cascadeWaves.sumOf { it.size }
+    val cascadeCount: Int get() = (cascadeWaves.size - 1).coerceAtLeast(0)
+    val allMatches: List<OrbMatch> get() = cascadeWaves.flatten()
 }
 
 object BoardAnalyzer {
@@ -78,6 +83,48 @@ object BoardAnalyzer {
             }
         }
         return BoardAnalysis(groups)
+    }
+
+    /**
+     * Resolves currently available matches, drops surviving orbs, and repeats
+     * until no further matches form. Empty cells remain UNKNOWN; no skyfall is modeled.
+     */
+    fun resolveCascades(board: Board): BoardAnalysis {
+        var orbs = board.orbs
+        val waves = mutableListOf<List<OrbMatch>>()
+
+        while (true) {
+            val wave = analyze(board.copy(orbs = orbs))
+            if (wave.matches.isEmpty()) break
+
+            waves += wave.matches
+            orbs = dropMatches(board.columns, board.rows, orbs, wave.matches)
+        }
+
+        return BoardAnalysis(
+            matches = waves.firstOrNull().orEmpty(),
+            cascadeWaves = waves,
+        )
+    }
+
+    private fun dropMatches(
+        columns: Int,
+        rows: Int,
+        orbs: List<Orb>,
+        matches: List<OrbMatch>,
+    ): List<Orb> {
+        val cleared = matches.asSequence().flatMap { it.positions.asSequence() }.toSet()
+        val dropped = MutableList(columns * rows) { Orb(OrbColor.UNKNOWN) }
+
+        for (column in 0 until columns) {
+            var destinationRow = rows - 1
+            for (row in rows - 1 downTo 0) {
+                if (BoardPosition(row, column) in cleared) continue
+                dropped[destinationRow * columns + column] = orbs[row * columns + column]
+                destinationRow--
+            }
+        }
+        return dropped
     }
 
     private fun neighbors(position: BoardPosition, rows: Int, columns: Int): List<Pair<Int, Int>> =
