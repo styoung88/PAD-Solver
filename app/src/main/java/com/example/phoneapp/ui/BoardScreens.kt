@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardPosition
+import com.example.phoneapp.board.RouteMarkerLayout
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.solver.BoardSolution
@@ -180,15 +181,26 @@ fun OrbBoard(
             }
             paint.style = android.graphics.Paint.Style.FILL
             paint.textAlign = android.graphics.Paint.Align.CENTER
-            paint.textSize = radius * 0.75f
             paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-            path.forEachIndexed { index, position ->
-                val x = (position.column + 0.5f) * cellWidth
-                val y = (position.row + 0.5f) * cellHeight
+            val markers = RouteMarkerLayout.place(path)
+            val normalTextSize = radius * 0.75f
+            markers.forEach { marker ->
+                val x = (marker.position.column + 0.5f + marker.offsetXFraction) * cellWidth
+                val y = (marker.position.row + 0.5f + marker.offsetYFraction) * cellHeight
+                val markerRadius = if (marker.repeatedVisit) {
+                    minOf(cellWidth, cellHeight) * marker.radiusFraction
+                } else {
+                    radius * 0.29f
+                }
+                paint.textSize = if (marker.repeatedVisit) {
+                    minOf(normalTextSize, markerRadius * 1.2f)
+                } else {
+                    normalTextSize
+                }
                 paint.color = android.graphics.Color.rgb(20, 31, 44)
-                native.drawCircle(x, y, radius * 0.29f, paint)
+                native.drawCircle(x, y, markerRadius, paint)
                 paint.color = android.graphics.Color.WHITE
-                native.drawText((index + 1).toString(), x, y + paint.textSize * 0.34f, paint)
+                native.drawText((marker.pathIndex + 1).toString(), x, y + paint.textSize * 0.34f, paint)
             }
         }
     }
