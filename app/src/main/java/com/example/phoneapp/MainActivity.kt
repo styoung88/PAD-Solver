@@ -103,6 +103,10 @@ class MainActivity : ComponentActivity() {
                             SolutionScreen(
                                 board = board,
                                 solution = solution!!,
+                                preferredColor = preferredColor,
+                                isSolving = isSolving,
+                                onPreferredColorChanged = ::updatePreferredColor,
+                                onRecalculate = ::solveBoard,
                                 onShowInGame = { showSolutionInPad(solution!!) },
                                 onHideRoute = { stopService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_HIDE)) },
                                 onNewBoard = { resetToHome() },
@@ -173,16 +177,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun solveBoard() {
+    private fun solveBoard(color: OrbColor? = preferredColor) {
         val board = (recognition as? BoardRecognition.Recognized)?.board ?: return
         isSolving = true
         lifecycleScope.launch {
-            val goal = preferredColor?.let(::MaximizeColorDamage) ?: MaximizeCombos
-            solution = runCatching { BoardSolver().solve(board, SolveOptions(goal = goal)) }
+            val goal = color?.let(::MaximizeColorDamage) ?: MaximizeCombos
+            runCatching { BoardSolver().solve(board, SolveOptions(goal = goal)) }
+                .onSuccess { solution = it }
                 .onFailure {
                     Toast.makeText(this@MainActivity, "Could not find a route. Please try again.", Toast.LENGTH_LONG).show()
                 }
-                .getOrNull()
             isSolving = false
         }
     }
