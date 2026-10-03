@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardPosition
-import com.example.phoneapp.board.RouteMarkerLayout
+import com.example.phoneapp.board.RouteStepMarkerLayout
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.solver.BoardSolution
@@ -116,7 +116,7 @@ fun SolutionScreen(
         Spacer(Modifier.height(16.dp))
         OrbBoard(board = board, matches = solution.predictedMatches, path = solution.path)
         Spacer(Modifier.height(12.dp))
-        Text("Follow the numbered path from 1 to ${solution.path.size}.")
+        Text("Start at 1, then follow each number along the path.")
         Spacer(Modifier.height(18.dp))
         Button(onClick = onShowInGame) { Text("Show route in PAD") }
         Spacer(Modifier.height(8.dp))
@@ -182,25 +182,17 @@ fun OrbBoard(
             paint.style = android.graphics.Paint.Style.FILL
             paint.textAlign = android.graphics.Paint.Align.CENTER
             paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-            val markers = RouteMarkerLayout.place(path)
-            val normalTextSize = radius * 0.75f
+            val markers = RouteStepMarkerLayout.place(path)
+            val normalTextSize = radius * 0.62f
             markers.forEach { marker ->
-                val x = (marker.position.column + 0.5f + marker.offsetXFraction) * cellWidth
-                val y = (marker.position.row + 0.5f + marker.offsetYFraction) * cellHeight
-                val markerRadius = if (marker.repeatedVisit) {
-                    minOf(cellWidth, cellHeight) * marker.radiusFraction
-                } else {
-                    radius * 0.29f
-                }
-                paint.textSize = if (marker.repeatedVisit) {
-                    minOf(normalTextSize, markerRadius * 1.2f)
-                } else {
-                    normalTextSize
-                }
+                val x = marker.gridX * cellWidth
+                val y = marker.gridY * cellHeight
+                val markerRadius = if (marker.isStart) radius * 0.31f else radius * 0.29f
+                paint.textSize = normalTextSize
                 paint.color = android.graphics.Color.rgb(20, 31, 44)
                 native.drawCircle(x, y, markerRadius, paint)
                 paint.color = android.graphics.Color.WHITE
-                native.drawText((marker.pathIndex + 1).toString(), x, y + paint.textSize * 0.34f, paint)
+                native.drawText(marker.stepNumber.toString(), x, y + paint.textSize * 0.34f, paint)
             }
         }
     }

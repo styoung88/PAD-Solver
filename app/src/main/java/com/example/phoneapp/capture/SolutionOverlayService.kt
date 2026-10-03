@@ -13,7 +13,7 @@ import android.view.View
 import android.view.WindowManager
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardPosition
-import com.example.phoneapp.board.RouteMarkerLayout
+import com.example.phoneapp.board.RouteStepMarkerLayout
 import android.widget.TextView
 
 class SolutionOverlayService : Service() {
@@ -155,28 +155,15 @@ class SolutionOverlayService : Service() {
                 val to = points[index + 1]
                 canvas.drawLine(from.first, from.second, to.first, to.second, linePaint)
             }
-            val normalTextSize = numberPaint.textSize
-            RouteMarkerLayout.place(positions).forEach { marker ->
-                val point = (
-                    (boardBounds.left + (marker.position.column + 0.5f + marker.offsetXFraction) *
-                        boardBounds.width() / Board.DEFAULT_COLUMNS) * scaleX
-                    ) to (
-                    (boardBounds.top + (marker.position.row + 0.5f + marker.offsetYFraction) *
-                        boardBounds.height() / Board.DEFAULT_ROWS) * scaleY
-                    )
-                val radius = if (marker.repeatedVisit) {
-                    minOf(cellWidth, cellHeight) * marker.radiusFraction
-                } else {
-                    maxOf(minOf(cellWidth, cellHeight) * 0.22f, badgeRadius)
-                }
-                numberPaint.textSize = if (marker.repeatedVisit) {
-                    minOf(normalTextSize, radius * 1.2f)
-                } else {
-                    normalTextSize
-                }
+            val normalTextSize = maxOf(11f * resources.displayMetrics.density, minOf(cellWidth, cellHeight) * 0.18f)
+            RouteStepMarkerLayout.place(positions).forEach { marker ->
+                val point = (boardBounds.left + marker.gridX * boardBounds.width() / Board.DEFAULT_COLUMNS) * scaleX to
+                    (boardBounds.top + marker.gridY * boardBounds.height() / Board.DEFAULT_ROWS) * scaleY
+                val radius = if (marker.isStart) badgeRadius * 1.05f else maxOf(minOf(cellWidth, cellHeight) * 0.22f, badgeRadius)
+                numberPaint.textSize = normalTextSize
                 canvas.drawCircle(point.first, point.second, radius, badgePaint)
                 val textY = point.second - (numberPaint.ascent() + numberPaint.descent()) / 2f
-                canvas.drawText((marker.pathIndex + 1).toString(), point.first, textY, numberPaint)
+                canvas.drawText(marker.stepNumber.toString(), point.first, textY, numberPaint)
             }
         }
     }
