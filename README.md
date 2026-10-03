@@ -1,6 +1,6 @@
 # Android-solver
 
-A native Android app project using Kotlin and Jetpack Compose. It is set up for local development with a Play Store compatible target SDK baseline.
+A native Android app that captures and solves a standard Puzzles & Dragons board. It uses Kotlin and Jetpack Compose and targets the newest installed Android API.
 
 ## Requirements
 
@@ -10,6 +10,19 @@ A native Android app project using Kotlin and Jetpack Compose. It is set up for 
 - Git
 
 Install SDK Platform 37 and Android SDK Build Tools 36.0.0 from Android Studio's SDK Manager if they are not already installed. Open this folder in Android Studio and let it sync the Gradle project. Connect your phone with USB debugging enabled to run on your device, or create an emulator.
+
+## First-version flow
+
+1. Tap **Capture board** and approve the screen-capture and notification prompts.
+2. Switch to Puzzles & Dragons, open the notification shade, and tap **Capture board** in the ongoing capture notification.
+3. Review the detected 6×5 board, then solve it.
+4. Tap **Show route in PAD**. If asked, grant draw-over-apps access, then tap **Show route in PAD** again to display the numbered, touch-through route overlay. No game input is automated.
+
+Each screen-capture session requires system approval. Notifications are needed for the capture action on Android 13 and later. Captured images are kept in the app's private storage and are excluded from Android backup. They are not sent over the network.
+
+The initial recognizer supports the six ordinary orb colors and hearts. Hazards are not supported yet; uncertain captures ask for a new capture. Locked and enhanced properties have a place in the board model but are not detected in this version. Board recognition uses a first-pass image heuristic and may need tuning against real screenshots.
+
+The solver uses a bounded beam search to find high-combo routes and prefers shorter routes when combo counts tie. It does not use the in-game timer. Like other bounded searches, it is not guaranteed to find the global optimum; the search objective and move bound are isolated so future goal types and complexity settings can be added.
 
 ## Project structure
 
@@ -31,12 +44,4 @@ docs/                 Project notes and decisions
 
 ## Git
 
-The local `main` branch tracks `origin/main` on GitHub. The app starter files are currently uncommitted. To add and push them:
-
-```powershell
-git add .
-git commit -m "Add Android app starter"
-git push
-```
-
-Do not commit `local.properties`, build outputs, or signing credentials.
+Start each feature from an up-to-date `main` branch. Use Conventional Commit messages. When a feature is complete, commit it and push and merge it before starting the next feature. Do not commit `local.properties`, build outputs, or signing credentials.
