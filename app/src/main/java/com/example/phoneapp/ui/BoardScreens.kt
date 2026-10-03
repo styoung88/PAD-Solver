@@ -5,15 +5,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -36,6 +42,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
@@ -113,12 +125,20 @@ fun BoardPreviewScreen(
             Spacer(Modifier.height(12.dp))
             OrbBoard(board = recognition.board)
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = openSettings, enabled = !isSolving) { Text("Solve settings  ›") }
-            Spacer(Modifier.height(18.dp))
-            Button(onClick = { onSolve(preferredColor) }, enabled = !isSolving) {
-                Text(if (isSolving) "Finding a route…" else "Solve board")
+            SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
+            Spacer(Modifier.height(12.dp))
+            if (isSolving) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.height(8.dp))
+                Text("Finding a route…")
+            } else {
+                Text(
+                    "Choose your options in Solve settings, then apply to find a route.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
             OutlinedButton(onClick = onRetry, enabled = !isSolving) { Text("Capture again") }
             }
         }
@@ -199,9 +219,31 @@ private fun SolveSettingsDrawer(
             }
         },
     ) {
-        content {
-            if (!isSolving) scope.launch { drawerState.open() }
+        Box(Modifier.fillMaxSize()) {
+            content {
+                if (!isSolving) scope.launch { drawerState.open() }
+            }
+            DrawerEdgeIndicator(
+                modifier = Modifier.align(Alignment.CenterStart),
+                onClick = { if (!isSolving) scope.launch { drawerState.open() } },
+            )
         }
+    }
+}
+
+@Composable
+private fun DrawerEdgeIndicator(modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(topEnd = 14.dp, bottomEnd = 14.dp)
+    Box(
+        modifier = modifier
+            .size(width = 20.dp, height = 64.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = "Open solve settings drawer" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
     }
 }
 
@@ -238,7 +280,7 @@ fun SolutionScreen(
         Spacer(Modifier.height(12.dp))
         Text("Start at 1, then follow each number along the path.")
         Spacer(Modifier.height(18.dp))
-        OutlinedButton(onClick = openSettings, enabled = !isSolving) { Text("Solve settings  ›") }
+        SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
         Spacer(Modifier.height(8.dp))
         Button(onClick = onShowInGame, enabled = !isSolving) { Text("Show route in PAD") }
         Spacer(Modifier.height(8.dp))
@@ -247,6 +289,33 @@ fun SolutionScreen(
         OutlinedButton(onClick = onNewBoard) { Text("New board") }
     }
 }
+}
+
+@Composable
+private fun SettingsDrawerTrigger(onClick: () -> Unit, enabled: Boolean) {
+    val iconColor = MaterialTheme.colorScheme.onSurfaceVariant
+    OutlinedButton(onClick = onClick, enabled = enabled) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Canvas(Modifier.size(width = 18.dp, height = 16.dp)) {
+                val strokeWidth = size.height * 0.12f
+                listOf(0.2f, 0.5f, 0.8f).forEach { fraction ->
+                    val y = size.height * fraction
+                    drawLine(
+                        color = iconColor,
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = strokeWidth,
+                        cap = StrokeCap.Round,
+                    )
+                }
+            }
+            Text("Solve settings")
+            Text("›")
+        }
+    }
 }
 
 @Composable
