@@ -1,6 +1,8 @@
 package com.example.phoneapp.capture
 
 import android.graphics.BitmapFactory
+import android.os.SystemClock
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.board.OrbColor
@@ -18,7 +20,10 @@ class PadBoardRecognizerReferenceTest {
         val screenshot = checkNotNull(bitmap) { "Could not decode the local reference screenshot." }
 
         try {
+            val startNanos = SystemClock.elapsedRealtimeNanos()
             val result = PadBoardRecognizer().recognize(screenshot)
+            val elapsedMillis = (SystemClock.elapsedRealtimeNanos() - startNanos) / 1_000_000
+            Log.i(BENCHMARK_TAG, "Reference recognition took ${elapsedMillis}ms")
             assertTrue("Expected a recognized board, got $result", result is BoardRecognition.Recognized)
             val recognized = result as BoardRecognition.Recognized
             val rows = recognized.board.orbs.chunked(recognized.board.columns).map { row ->
@@ -47,6 +52,7 @@ class PadBoardRecognizerReferenceTest {
 
     private companion object {
         const val REFERENCE_SCREENSHOT = "pad-board-reference.png"
+        const val BENCHMARK_TAG = "PadBoardBenchmark"
         val EXPECTED_ROWS = listOf(
             "GDGDHB",
             "BRRBDD",

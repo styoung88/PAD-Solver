@@ -24,6 +24,7 @@ sealed interface BoardRecognition {
 class PadBoardRecognizer {
     fun recognize(bitmap: Bitmap): BoardRecognition {
         if (bitmap.width < 200 || bitmap.height < 300) return BoardRecognition.Uncertain(0)
+        val colorMap = ClassifiedImage.from(bitmap, ::classify)
 
         var best: Candidate? = null
         val minWidth = bitmap.width * MIN_BOARD_WIDTH_FRACTION
@@ -45,7 +46,7 @@ class PadBoardRecognizer {
                     for (column in 0 until Board.DEFAULT_COLUMNS) {
                         val x = left + (column + 0.5f) * cellSize
                         val y = top + (row + 0.5f) * cellSize
-                        samples += sampleOrbColor(bitmap, x, y, cellSize)
+                        samples += sampleOrbColor(colorMap, x, y, cellSize)
                     }
                 }
                 val colors = samples.map(OrbSample::color)
@@ -86,32 +87,40 @@ class PadBoardRecognizer {
         )
     }
 
-    private fun sampleOrbColor(bitmap: Bitmap, centerX: Float, centerY: Float, cellSize: Float): OrbSample {
+    private fun sampleOrbColor(
+        image: ClassifiedImage,
+        centerX: Float,
+        centerY: Float,
+        cellSize: Float,
+    ): OrbSample {
         val votes = IntArray(OrbColor.entries.size)
         var sampledPatches = 0
         // PAD draws the orb's color around its interior art. Sampling a small ring of
         // independent patches is less sensitive to that art and to the + marker at
         // the lower-right edge of enhanced orbs. Each patch gets one vote so a
         // particularly colorful patch cannot dominate the whole cell.
-        val patchRadius = cellSize * SAMPLE_PATCH_RADIUS_FRACTION
-        val patchOffset = cellSize * SAMPLE_RING_OFFSET_FRACTION
+        val scale = image.sourcePixelsPerMapPixel
+        val mappedCenterX = centerX / scale
+        val mappedCenterY = centerY / scale
+        val mappedCellSize = cellSize / scale
+        val patchRadius = mappedCellSize * SAMPLE_PATCH_RADIUS_FRACTION
+        val patchOffset = mappedCellSize * SAMPLE_RING_OFFSET_FRACTION
         val patchVotes = IntArray(OrbColor.entries.size)
-        val step = (cellSize * SAMPLE_STEP_FRACTION).toInt().coerceAtLeast(1)
-        val hsv = FloatArray(3)
+        val step = (mappedCellSize * SAMPLE_STEP_FRACTION).toInt().coerceAtLeast(1)
         for ((directionX, directionY) in SAMPLE_PATCH_DIRECTIONS) {
             patchVotes.fill(0)
             val offsetX = directionX * patchOffset
             val offsetY = directionY * patchOffset
-            val left = (centerX + offsetX - patchRadius).toInt().coerceAtLeast(0)
-            val right = (centerX + offsetX + patchRadius).toInt().coerceAtMost(bitmap.width - 1)
-            val top = (centerY + offsetY - patchRadius).toInt().coerceAtLeast(0)
-            val bottom = (centerY + offsetY + patchRadius).toInt().coerceAtMost(bitmap.height - 1)
+            val left = (mappedCenterX + offsetX - patchRadius).toInt().coerceAtLeast(0)
+            val right = (mappedCenterX + offsetX + patchRadius).toInt().coerceAtMost(image.width - 1)
+            val top = (mappedCenterY + offsetY - patchRadius).toInt().coerceAtLeast(0)
+            val bottom = (mappedCenterY + offsetY + patchRadius).toInt().coerceAtMost(image.height - 1)
             var y = top
             while (y <= bottom) {
                 var x = left
                 while (x <= right) {
-                    Color.colorToHSV(bitmap.getPixel(x, y), hsv)
-                    classify(hsv)?.let { patchVotes[it.ordinal]++ }
+                    val colorIndex = image.colorAt(x, y)
+                    if (colorIndex >= 0) patchVotes[colorIndex]++
                     x += step
                 }
                 y += step
@@ -181,6 +190,59 @@ class PadBoardRecognizer {
 
     private data class OrbSample(val color: OrbColor, val colorSupport: Float)
 
+    private class ClassifiedImage private constructor(
+        val width: Int,
+        val height: Int,
+        val sourcePixelsPerMapPixel: Int,
+        private val colors: ByteArray,
+    ) {
+        fun colorAt(x: Int, y: Int): Int = colors[y * width + x].toInt()
+
+        companion object {
+            fun from(bitmap: Bitmap, classifyColor: (FloatArray) -> OrbColor?): ClassifiedImage {
+                val width = (bitmap.width + MAP_SCALE - 1) / MAP_SCALE
+                val height = (bitmap.height + MAP_SCALE - 1) / MAP_SCALE
+                val colors = ByteArray(width * height) { NO_COLOR.toByte() }
+                val hsv = FloatArray(3)
+                val rowsPerBatch = SOURCE_ROWS_PER_BATCH
+                val sourceRows = IntArray(bitmap.width * rowsPerBatch)
+                var sourceTop = 0
+                while (sourceTop < bitmap.height) {
+                    val batchHeight = minOf(rowsPerBatch, bitmap.height - sourceTop)
+                    bitmap.getPixels(sourceRows, 0, bitmap.width, 0, sourceTop, bitmap.width, batchHeight)
+                    var localY = 0
+                    while (localY < batchHeight) {
+                        val nextLocalY = minOf(localY + 1, batchHeight - 1)
+                        val outputY = (sourceTop + localY) / MAP_SCALE
+                        for (outputX in 0 until width) {
+                            val sourceX = outputX * MAP_SCALE
+                            var red = 0
+                            var green = 0
+                            var blue = 0
+                            var count = 0
+                            for (dy in localY..nextLocalY) {
+                                for (dx in sourceX until minOf(sourceX + MAP_SCALE, bitmap.width)) {
+                                    val pixel = sourceRows[dy * bitmap.width + dx]
+                                    red += Color.red(pixel)
+                                    green += Color.green(pixel)
+                                    blue += Color.blue(pixel)
+                                    count++
+                                }
+                            }
+                            val averagedPixel = Color.rgb(red / count, green / count, blue / count)
+                            Color.colorToHSV(averagedPixel, hsv)
+                            colors[outputY * width + outputX] =
+                                (classifyColor(hsv)?.ordinal ?: NO_COLOR).toByte()
+                        }
+                        localY += MAP_SCALE
+                    }
+                    sourceTop += batchHeight
+                }
+                return ClassifiedImage(width, height, MAP_SCALE, colors)
+            }
+        }
+    }
+
     private companion object {
         const val MIN_BOARD_WIDTH_FRACTION = 0.70f
         const val MAX_BOARD_WIDTH_FRACTION = 0.995f
@@ -219,5 +281,8 @@ class PadBoardRecognizer {
         const val MIN_AVERAGE_COLOR_SUPPORT = 0.30f
         const val MIN_RECOGNIZED_CELLS = Board.DEFAULT_COLUMNS * Board.DEFAULT_ROWS
         const val MIN_COLOR_VARIETY = 4
+        const val MAP_SCALE = 2
+        const val SOURCE_ROWS_PER_BATCH = 16
+        const val NO_COLOR = -1
     }
 }
