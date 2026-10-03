@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,7 +46,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
-    private var capturePath by mutableStateOf<String?>(null)
     private var recognition by mutableStateOf<BoardRecognition?>(null)
     private var solution by mutableStateOf<BoardSolution?>(null)
     private var preferredColor by mutableStateOf<OrbColor?>(null)
@@ -87,6 +87,10 @@ class MainActivity : ComponentActivity() {
         ).show()
     }
 
+    private val screenshotPicker = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> uri?.let(::loadCapture) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferredColor = getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE)
@@ -120,7 +124,10 @@ class MainActivity : ComponentActivity() {
                             onRetry = { resetToHome(); startCaptureFlow() },
                         )
                         else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            HomeScreen(onCapture = ::startCaptureFlow)
+                            HomeScreen(
+                                onCapture = ::startCaptureFlow,
+                                onChooseScreenshot = ::chooseExistingScreenshot,
+                            )
                         }
                     }
                 }
@@ -136,6 +143,12 @@ class MainActivity : ComponentActivity() {
 
     private fun startCaptureFlow() {
         requestScreenCapturePermission()
+    }
+
+    private fun chooseExistingScreenshot() {
+        screenshotPicker.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+        )
     }
 
     private fun requestScreenCapturePermission() {
@@ -154,18 +167,31 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadCapture(path: String) {
-        capturePath = path
+        loadImage { android.graphics.BitmapFactory.decodeFile(path) }
+    }
+
+    private fun loadCapture(uri: Uri) {
+        loadImage {
+            contentResolver.openInputStream(uri)?.use { input ->
+                android.graphics.BitmapFactory.decodeStream(input)
+            }
+        }
+    }
+
+    private fun loadImage(decodeBitmap: () -> android.graphics.Bitmap?) {
         recognition = null
         solution = null
         isReadingCapture = true
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.Default) {
-                val bitmap = android.graphics.BitmapFactory.decodeFile(path)
+            val result = withContext(Dispatchers.IO) {
+                val bitmap = runCatching { decodeBitmap() }.getOrNull()
                 if (bitmap == null) {
                     BoardRecognition.Uncertain(0)
                 } else {
                     try {
-                        PadBoardRecognizer().recognize(bitmap)
+                        withContext(Dispatchers.Default) {
+                            PadBoardRecognizer().recognize(bitmap)
+                        }
                     } finally {
                         bitmap.recycle()
                     }
@@ -239,7 +265,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun resetToHome() {
-        capturePath = null
         recognition = null
         solution = null
         isReadingCapture = false

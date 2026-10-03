@@ -65,7 +65,7 @@ import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.solver.BoardSolution
 
 @Composable
-fun HomeScreen(onCapture: () -> Unit) {
+fun HomeScreen(onCapture: () -> Unit, onChooseScreenshot: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -79,6 +79,8 @@ fun HomeScreen(onCapture: () -> Unit) {
         )
         Spacer(Modifier.height(24.dp))
         Button(onClick = onCapture) { Text("Capture board") }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = onChooseScreenshot) { Text("Choose existing screenshot") }
         Spacer(Modifier.height(12.dp))
         Text(
             "Screen capture and notifications are used to capture the board. Draw-over-apps access is only needed to show the route.",
