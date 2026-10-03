@@ -134,12 +134,6 @@ fun BoardPreviewScreen(
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.height(8.dp))
                 Text("Finding a route…")
-            } else {
-                Text(
-                    "Choose your options in Solve settings, then apply to find a route.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(onClick = onRetry, enabled = !isSolving) { Text("Capture again") }
@@ -261,7 +255,6 @@ fun SolutionScreen(
     onPreferredColorChanged: (OrbColor?) -> Unit,
     onRecalculate: (OrbColor?) -> Unit,
     onShowInGame: () -> Unit,
-    onHideRoute: () -> Unit,
     onNewBoard: () -> Unit,
 ) {
     SolveSettingsDrawer(
@@ -288,8 +281,6 @@ fun SolutionScreen(
         SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
         Spacer(Modifier.height(8.dp))
         Button(onClick = onShowInGame, enabled = !isSolving) { Text("Show route in PAD") }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onHideRoute) { Text("Hide route overlay") }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onNewBoard) { Text("New board") }
     }

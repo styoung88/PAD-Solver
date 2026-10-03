@@ -108,7 +108,6 @@ class MainActivity : ComponentActivity() {
                                 onPreferredColorChanged = ::updatePreferredColor,
                                 onRecalculate = ::solveBoard,
                                 onShowInGame = { showSolutionInPad(solution!!) },
-                                onHideRoute = { stopService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_HIDE)) },
                                 onNewBoard = { resetToHome() },
                             )
                         }
