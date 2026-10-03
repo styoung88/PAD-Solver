@@ -23,11 +23,43 @@ data class GoalEvaluation(
  */
 fun interface SolveGoal {
     fun evaluate(analysis: BoardAnalysis): GoalEvaluation
+
+    val preferredColor: OrbColor? get() = null
 }
 
 object MaximizeCombos : SolveGoal {
     override fun evaluate(analysis: BoardAnalysis) =
         GoalEvaluation(satisfied = true, primaryScore = analysis.comboCount)
+}
+
+/** Board-only estimate for a mono-color team: orb-count factor × total combo factor. */
+data class MaximizeColorDamage(val color: OrbColor) : SolveGoal {
+    init {
+        require(color in ATTACK_COLORS) { "A damage focus must use an attacking orb color." }
+    }
+
+    override val preferredColor: OrbColor get() = color
+
+    override fun evaluate(analysis: BoardAnalysis): GoalEvaluation =
+        GoalEvaluation(satisfied = true, primaryScore = ColorDamageEstimate.scoreInSixteenths(analysis, color))
+
+    private companion object {
+        val ATTACK_COLORS = setOf(OrbColor.FIRE, OrbColor.WATER, OrbColor.WOOD, OrbColor.LIGHT, OrbColor.DARK)
+    }
+}
+
+/**
+ * A relative board score, not a prediction of actual damage. It models only
+ * the size factor of each focused-color match and the global combo factor.
+ * Both factors advance in quarter steps, so their product is stored in 1/16ths.
+ */
+object ColorDamageEstimate {
+    fun scoreInSixteenths(analysis: BoardAnalysis, color: OrbColor): Int {
+        val comboFactorInQuarters = analysis.comboCount + 3
+        return analysis.matches.asSequence()
+            .filter { it.color == color }
+            .sumOf { match -> comboFactorInQuarters * (match.size + 1) }
+    }
 }
 
 data class SolveOptions(
@@ -47,6 +79,7 @@ data class BoardSolution(
     val path: List<BoardPosition>,
     val predictedMatches: BoardAnalysis,
     val goalSatisfied: Boolean,
+    val preferredColor: OrbColor? = null,
 ) {
     val comboCount: Int get() = predictedMatches.comboCount
     val orbMoves: Int get() = (path.size - 1).coerceAtLeast(0)
@@ -121,6 +154,7 @@ class BoardSolver {
             path = best.state.path.map(board::positionOf),
             predictedMatches = best.analysis,
             goalSatisfied = best.goal.satisfied,
+            preferredColor = options.goal.preferredColor,
         )
     }
 

@@ -31,8 +31,12 @@ import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.capture.PadBoardRecognizer
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
+import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.BoardSolver
+import com.example.phoneapp.solver.MaximizeColorDamage
+import com.example.phoneapp.solver.MaximizeCombos
+import com.example.phoneapp.solver.SolveOptions
 import com.example.phoneapp.ui.BoardPreviewScreen
 import com.example.phoneapp.ui.HomeScreen
 import com.example.phoneapp.ui.SolutionScreen
@@ -44,6 +48,7 @@ class MainActivity : ComponentActivity() {
     private var capturePath by mutableStateOf<String?>(null)
     private var recognition by mutableStateOf<BoardRecognition?>(null)
     private var solution by mutableStateOf<BoardSolution?>(null)
+    private var preferredColor by mutableStateOf<OrbColor?>(null)
     private var isReadingCapture by mutableStateOf(false)
     private var isSolving by mutableStateOf(false)
     private var pendingRoutePermission = false
@@ -84,6 +89,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        preferredColor = getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE)
+            .getString(PREFERRED_COLOR_KEY, null)
+            ?.let { value -> runCatching { OrbColor.valueOf(value) }.getOrNull() }
         intent.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(::loadCapture)
         setContent {
             MaterialTheme {
@@ -103,6 +111,8 @@ class MainActivity : ComponentActivity() {
                         recognition != null -> BoardPreviewScreen(
                             recognition = recognition!!,
                             isSolving = isSolving,
+                            preferredColor = preferredColor,
+                            onPreferredColorChanged = ::updatePreferredColor,
                             onSolve = { solveBoard() },
                             onRetry = { resetToHome(); startCaptureFlow() },
                         )
@@ -167,13 +177,21 @@ class MainActivity : ComponentActivity() {
         val board = (recognition as? BoardRecognition.Recognized)?.board ?: return
         isSolving = true
         lifecycleScope.launch {
-            solution = runCatching { BoardSolver().solve(board) }
+            val goal = preferredColor?.let(::MaximizeColorDamage) ?: MaximizeCombos
+            solution = runCatching { BoardSolver().solve(board, SolveOptions(goal = goal)) }
                 .onFailure {
                     Toast.makeText(this@MainActivity, "Could not find a route. Please try again.", Toast.LENGTH_LONG).show()
                 }
                 .getOrNull()
             isSolving = false
         }
+    }
+
+    private fun updatePreferredColor(color: OrbColor?) {
+        preferredColor = color
+        getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE).edit().apply {
+            if (color == null) remove(PREFERRED_COLOR_KEY) else putString(PREFERRED_COLOR_KEY, color.name)
+        }.apply()
     }
 
     private fun showSolutionInPad(result: BoardSolution) {
@@ -224,6 +242,11 @@ class MainActivity : ComponentActivity() {
         isReadingCapture = false
         isSolving = false
         stopService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_HIDE))
+    }
+
+    private companion object {
+        const val SOLVER_PREFERENCES = "solver_preferences"
+        const val PREFERRED_COLOR_KEY = "preferred_orb_color"
     }
 }
 

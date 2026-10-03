@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -61,6 +62,8 @@ fun HomeScreen(onCapture: () -> Unit) {
 fun BoardPreviewScreen(
     recognition: BoardRecognition,
     isSolving: Boolean,
+    preferredColor: OrbColor?,
+    onPreferredColorChanged: (OrbColor?) -> Unit,
     onSolve: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -85,7 +88,34 @@ fun BoardPreviewScreen(
             Text("Review board", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
             Text("Check the detected 6×5 layout before solving. Editing is not available yet.")
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+            Text("Optimize color damage for")
+            val colorChoices = listOf(
+                null to "Any",
+                OrbColor.FIRE to "Fire",
+                OrbColor.WATER to "Water",
+                OrbColor.WOOD to "Wood",
+                OrbColor.LIGHT to "Light",
+                OrbColor.DARK to "Dark",
+            )
+            for (row in colorChoices.chunked(3)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { (color, label) ->
+                        FilterChip(
+                            selected = preferredColor == color,
+                            onClick = { if (!isSolving) onPreferredColorChanged(color) },
+                            enabled = !isSolving,
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+            Text(
+                "Estimate uses match size and total combos only; team and enemy modifiers are not included.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
             OrbBoard(board = recognition.board)
             Spacer(Modifier.height(18.dp))
             Button(onClick = onSolve, enabled = !isSolving) {
@@ -113,6 +143,10 @@ fun SolutionScreen(
         Text("Suggested route", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(6.dp))
         Text("${solution.comboCount} combos · ${solution.orbMoves} orb moves")
+        solution.preferredColor?.let { color ->
+            val colorMatches = solution.predictedMatches.matches.count { it.color == color }
+            Text("${orbColorName(color)} focus · $colorMatches matched combos")
+        }
         Spacer(Modifier.height(16.dp))
         OrbBoard(board = board, matches = solution.predictedMatches, path = solution.path)
         Spacer(Modifier.height(12.dp))
@@ -206,4 +240,14 @@ private fun orbUiColor(color: OrbColor): Color = when (color) {
     OrbColor.DARK -> Color(0xFF9B6BCC)
     OrbColor.HEART -> Color(0xFFE78EB5)
     OrbColor.UNKNOWN -> Color(0xFF777777)
+}
+
+private fun orbColorName(color: OrbColor): String = when (color) {
+    OrbColor.FIRE -> "Fire"
+    OrbColor.WATER -> "Water"
+    OrbColor.WOOD -> "Wood"
+    OrbColor.LIGHT -> "Light"
+    OrbColor.DARK -> "Dark"
+    OrbColor.HEART -> "Heart"
+    OrbColor.UNKNOWN -> "Unknown"
 }
