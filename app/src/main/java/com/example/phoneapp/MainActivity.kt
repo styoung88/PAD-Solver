@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
                             preferredColor = preferredColor,
                             onPreferredColorChanged = ::updatePreferredColor,
                             onSolve = ::solveBoard,
-                            onRetry = { resetToHome(); startCaptureFlow() },
+                            onNewBoard = ::resetToHome,
                         )
                         else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             HomeScreen(

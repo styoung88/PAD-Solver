@@ -97,7 +97,7 @@ fun BoardPreviewScreen(
     preferredColor: OrbColor?,
     onPreferredColorChanged: (OrbColor?) -> Unit,
     onSolve: (OrbColor?) -> Unit,
-    onRetry: () -> Unit,
+    onNewBoard: () -> Unit,
 ) {
     when (recognition) {
         is BoardRecognition.Uncertain -> Column(
@@ -109,7 +109,7 @@ fun BoardPreviewScreen(
             Spacer(Modifier.height(8.dp))
             Text("Move to a normal board and capture again. No board changes were made.")
             Spacer(Modifier.height(20.dp))
-            Button(onClick = onRetry) { Text("Capture again") }
+            Button(onClick = onNewBoard) { Text("New board") }
         }
 
         is BoardRecognition.Recognized -> SolveSettingsDrawer(
@@ -138,7 +138,7 @@ fun BoardPreviewScreen(
                 Text("Finding a route…")
             }
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = onRetry, enabled = !isSolving) { Text("Capture again") }
+            OutlinedButton(onClick = onNewBoard, enabled = !isSolving) { Text("New board") }
             }
         }
     }
