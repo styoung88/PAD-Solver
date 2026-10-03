@@ -79,7 +79,7 @@ fun BoardPreviewScreen(
     isSolving: Boolean,
     preferredColor: OrbColor?,
     onPreferredColorChanged: (OrbColor?) -> Unit,
-    onSolve: () -> Unit,
+    onSolve: (OrbColor?) -> Unit,
     onRetry: () -> Unit,
 ) {
     when (recognition) {
@@ -95,48 +95,44 @@ fun BoardPreviewScreen(
             Button(onClick = onRetry) { Text("Capture again") }
         }
 
-        is BoardRecognition.Recognized -> Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
+        is BoardRecognition.Recognized -> SolveSettingsDrawer(
+            preferredColor = preferredColor,
+            isSolving = isSolving,
+            onPreferredColorChanged = onPreferredColorChanged,
+            actionLabel = if (isSolving) "Solving…" else "Apply and solve",
+            onApply = { onSolve(preferredColor) },
+        ) { openSettings ->
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
             Text("Review board", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
             Text("Check the detected 6×5 layout before solving. Editing is not available yet.")
             Spacer(Modifier.height(12.dp))
-            OrbColorDropdown(
-                selectedColor = preferredColor,
-                enabled = !isSolving,
-                onColorSelected = onPreferredColorChanged,
-            )
-            Text(
-                "Estimate uses match size and total combos only; team and enemy modifiers are not included.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
             OrbBoard(board = recognition.board)
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = openSettings, enabled = !isSolving) { Text("Solve settings  ›") }
             Spacer(Modifier.height(18.dp))
-            Button(onClick = onSolve, enabled = !isSolving) {
+            Button(onClick = { onSolve(preferredColor) }, enabled = !isSolving) {
                 Text(if (isSolving) "Finding a route…" else "Solve board")
             }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onRetry, enabled = !isSolving) { Text("Capture again") }
+            }
         }
     }
 }
 
 @Composable
-fun SolutionScreen(
-    board: Board,
-    solution: BoardSolution,
+private fun SolveSettingsDrawer(
     preferredColor: OrbColor?,
     isSolving: Boolean,
     onPreferredColorChanged: (OrbColor?) -> Unit,
-    onRecalculate: (OrbColor?) -> Unit,
-    onShowInGame: () -> Unit,
-    onHideRoute: () -> Unit,
-    onNewBoard: () -> Unit,
+    actionLabel: String,
+    onApply: () -> Unit,
+    content: @Composable (openSettings: () -> Unit) -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -178,13 +174,13 @@ fun SolutionScreen(
                         onClick = {
                             scope.launch {
                                 drawerState.close()
-                                onRecalculate(preferredColor)
+                                onApply()
                             }
                         },
                         enabled = !isSolving,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (isSolving) "Recalculating route…" else "Apply and recalculate")
+                        Text(actionLabel)
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
@@ -203,7 +199,32 @@ fun SolutionScreen(
             }
         },
     ) {
-    Column(
+        content {
+            if (!isSolving) scope.launch { drawerState.open() }
+        }
+    }
+}
+
+@Composable
+fun SolutionScreen(
+    board: Board,
+    solution: BoardSolution,
+    preferredColor: OrbColor?,
+    isSolving: Boolean,
+    onPreferredColorChanged: (OrbColor?) -> Unit,
+    onRecalculate: (OrbColor?) -> Unit,
+    onShowInGame: () -> Unit,
+    onHideRoute: () -> Unit,
+    onNewBoard: () -> Unit,
+) {
+    SolveSettingsDrawer(
+        preferredColor = preferredColor,
+        isSolving = isSolving,
+        onPreferredColorChanged = onPreferredColorChanged,
+        actionLabel = if (isSolving) "Recalculating route…" else "Apply and recalculate",
+        onApply = { onRecalculate(preferredColor) },
+    ) { openSettings ->
+        Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -212,21 +233,12 @@ fun SolutionScreen(
         Text("Suggested route", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(6.dp))
         Text("${solution.comboCount} combos · ${solution.orbMoves} orb moves")
-        solution.preferredColor?.let { color ->
-            val colorMatches = solution.predictedMatches.matches.count { it.color == color }
-            Text("${orbColorName(color)} focus · $colorMatches matched combos")
-        }
         Spacer(Modifier.height(16.dp))
         OrbBoard(board = board, matches = solution.predictedMatches, path = solution.path)
         Spacer(Modifier.height(12.dp))
         Text("Start at 1, then follow each number along the path.")
         Spacer(Modifier.height(18.dp))
-        OutlinedButton(
-            onClick = { scope.launch { drawerState.open() } },
-            enabled = !isSolving,
-        ) {
-            Text("Solve settings  ·  ${preferredColor?.let(::orbColorName) ?: "Any color"}  ›")
-        }
+        OutlinedButton(onClick = openSettings, enabled = !isSolving) { Text("Solve settings  ›") }
         Spacer(Modifier.height(8.dp))
         Button(onClick = onShowInGame, enabled = !isSolving) { Text("Show route in PAD") }
         Spacer(Modifier.height(8.dp))
@@ -234,7 +246,7 @@ fun SolutionScreen(
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onNewBoard) { Text("New board") }
     }
-    }
+}
 }
 
 @Composable

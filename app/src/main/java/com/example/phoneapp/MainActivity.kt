@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
                             isSolving = isSolving,
                             preferredColor = preferredColor,
                             onPreferredColorChanged = ::updatePreferredColor,
-                            onSolve = { solveBoard() },
+                            onSolve = ::solveBoard,
                             onRetry = { resetToHome(); startCaptureFlow() },
                         )
                         else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
