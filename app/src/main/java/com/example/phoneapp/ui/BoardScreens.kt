@@ -57,7 +57,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.example.phoneapp.board.Board
-import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardPosition
 import com.example.phoneapp.board.RouteStepMarkerLayout
 import com.example.phoneapp.board.OrbColor
@@ -341,7 +340,7 @@ fun SolutionScreen(
                 )
             }
             Spacer(Modifier.height(16.dp))
-            OrbBoard(board = board, matches = solution.predictedMatches, path = solution.path)
+            OrbBoard(board = board, path = solution.path)
             Spacer(Modifier.height(12.dp))
             Text("Start at 1, then follow each number along the path.")
             Spacer(Modifier.height(18.dp))
@@ -476,11 +475,9 @@ private fun ComboTargetDropdown(
 @Composable
 fun OrbBoard(
     board: Board,
-    matches: BoardAnalysis? = null,
     path: List<BoardPosition> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
-    val matchedPositions = matches?.matches?.flatMap { it.positions }?.toSet().orEmpty()
     Canvas(
         modifier = modifier.fillMaxWidth().aspectRatio(board.columns.toFloat() / board.rows.toFloat())
             .background(Color(0xFF202631), MaterialTheme.shapes.medium).padding(4.dp),
@@ -499,13 +496,6 @@ fun OrbBoard(
                 paint.color = color.toArgb()
                 paint.style = android.graphics.Paint.Style.FILL
                 native.drawCircle(centerX, centerY, radius, paint)
-
-                if (BoardPosition(row, column) in matchedPositions) {
-                    paint.color = android.graphics.Color.WHITE
-                    paint.style = android.graphics.Paint.Style.STROKE
-                    paint.strokeWidth = radius * 0.13f
-                    native.drawCircle(centerX, centerY, radius * 0.86f, paint)
-                }
 
                 if (OrbModifier.ENHANCED in board.orbs[row * board.columns + column].modifiers) {
                     paint.style = android.graphics.Paint.Style.FILL
