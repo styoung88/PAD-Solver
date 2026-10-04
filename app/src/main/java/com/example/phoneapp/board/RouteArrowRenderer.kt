@@ -1,6 +1,7 @@
 package com.example.phoneapp.board
 
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
@@ -9,6 +10,12 @@ import kotlin.math.hypot
 /** Shared arrow-first route styling for the in-app preview and PAD overlay. */
 object RouteArrowRenderer {
     private const val ROUTE_COLOR = 0xFF36E0D0.toInt()
+    private val ROUTE_GRADIENT = intArrayOf(
+        ROUTE_COLOR,
+        0xFF29B6F6.toInt(),
+        0xFF7E57C2.toInt(),
+        0xFFEC407A.toInt(),
+    )
     private const val OUTLINE_COLOR = 0xE817202B.toInt()
     private const val START_COLOR = 0xFF102A3A.toInt()
     private const val FINISH_COLOR = 0xFFFFD34D.toInt()
@@ -33,21 +40,21 @@ object RouteArrowRenderer {
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = OUTLINE_COLOR
             style = Paint.Style.STROKE
-            strokeWidth = maxOf(5f * density, cellSize * 0.19f)
+            strokeWidth = maxOf(3f * density, cellSize * 0.11f)
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
         val routePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = ROUTE_COLOR
             style = Paint.Style.STROKE
-            strokeWidth = maxOf(3f * density, cellSize * 0.095f)
+            strokeWidth = maxOf(2f * density, cellSize * 0.055f)
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
         val arrowOutline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = OUTLINE_COLOR
             style = Paint.Style.STROKE
-            strokeWidth = maxOf(4f * density, cellSize * 0.12f)
+            strokeWidth = maxOf(2f * density, cellSize * 0.055f)
             strokeJoin = Paint.Join.ROUND
         }
         val arrowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -55,8 +62,14 @@ object RouteArrowRenderer {
             style = Paint.Style.FILL
         }
 
+        val segmentCount = routePoints.lastIndex
+        val gradientStopCount = when {
+            segmentCount <= 10 -> 2
+            segmentCount <= 20 -> 3
+            else -> ROUTE_GRADIENT.size
+        }
         val edgeVisits = mutableMapOf<Long, Int>()
-        for (index in 0 until routePoints.lastIndex) {
+        for (index in 0 until segmentCount) {
             val fromPosition = path[index]
             val toPosition = path[index + 1]
             val from = routePoints[index]
@@ -84,6 +97,9 @@ object RouteArrowRenderer {
             val endX = to.first + offsetX
             val endY = to.second + offsetY
 
+            val segmentColor = routeColorForStep(index, segmentCount, gradientStopCount)
+            routePaint.color = segmentColor
+            arrowFill.color = segmentColor
             canvas.drawLine(startX, startY, endX, endY, outlinePaint)
             canvas.drawLine(startX, startY, endX, endY, routePaint)
 
@@ -96,7 +112,7 @@ object RouteArrowRenderer {
             val arrowTipY = startY + dy * 0.72f
             val arrowBaseX = startX + dx * 0.43f
             val arrowBaseY = startY + dy * 0.43f
-            val wing = cellSize * 0.16f
+            val wing = cellSize * 0.075f
             val arrow = Path().apply {
                 moveTo(arrowTipX, arrowTipY)
                 lineTo(arrowBaseX + perpendicularX * wing, arrowBaseY + perpendicularY * wing)
@@ -135,5 +151,22 @@ object RouteArrowRenderer {
             typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD)
         }
         canvas.drawText("E", finish.first, finish.second - (finishTextPaint.ascent() + finishTextPaint.descent()) / 2f, finishTextPaint)
+    }
+
+    private fun routeColorForStep(step: Int, segmentCount: Int, stopCount: Int): Int {
+        if (segmentCount <= 1 || stopCount <= 1) return ROUTE_GRADIENT.first()
+        val progress = step.toFloat() / (segmentCount - 1)
+        val colorPosition = progress * (stopCount - 1)
+        val startIndex = colorPosition.toInt().coerceIn(0, stopCount - 1)
+        val endIndex = (startIndex + 1).coerceAtMost(stopCount - 1)
+        val fraction = colorPosition - startIndex
+        val startColor = ROUTE_GRADIENT[startIndex]
+        val endColor = ROUTE_GRADIENT[endIndex]
+        fun channel(start: Int, end: Int) = (start + (end - start) * fraction).toInt()
+        return Color.rgb(
+            channel(Color.red(startColor), Color.red(endColor)),
+            channel(Color.green(startColor), Color.green(endColor)),
+            channel(Color.blue(startColor), Color.blue(endColor)),
+        )
     }
 }
