@@ -57,7 +57,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardPosition
-import com.example.phoneapp.board.RouteStepMarkerLayout
+import com.example.phoneapp.board.RouteArrowRenderer
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
 import com.example.phoneapp.capture.BoardRecognition
@@ -364,7 +364,7 @@ fun SolutionScreen(
             Spacer(Modifier.height(16.dp))
             OrbBoard(board = board, path = solution.path)
             Spacer(Modifier.height(12.dp))
-            Text("Start at 1, then follow each number along the path.")
+            Text("Start at S and follow the arrows to E.")
             Spacer(Modifier.height(18.dp))
             SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
             if (isSolving) {
@@ -588,37 +588,14 @@ fun OrbBoard(
         }
 
         if (path.isNotEmpty()) {
-            paint.color = android.graphics.Color.WHITE
-            paint.style = android.graphics.Paint.Style.STROKE
-            paint.strokeWidth = radius * 0.15f
-            paint.strokeCap = android.graphics.Paint.Cap.ROUND
-            paint.strokeJoin = android.graphics.Paint.Join.ROUND
-            for (index in 0 until path.lastIndex) {
-                val from = path[index]
-                val to = path[index + 1]
-                native.drawLine(
-                    (from.column + 0.5f) * cellWidth,
-                    (from.row + 0.5f) * cellHeight,
-                    (to.column + 0.5f) * cellWidth,
-                    (to.row + 0.5f) * cellHeight,
-                    paint,
-                )
-            }
-            paint.style = android.graphics.Paint.Style.FILL
-            paint.textAlign = android.graphics.Paint.Align.CENTER
-            paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-            val markers = RouteStepMarkerLayout.place(path)
-            val normalTextSize = radius * 0.62f
-            markers.forEach { marker ->
-                val x = marker.gridX * cellWidth
-                val y = marker.gridY * cellHeight
-                val markerRadius = if (marker.isStart) radius * 0.31f else radius * 0.29f
-                paint.textSize = normalTextSize
-                paint.color = android.graphics.Color.rgb(20, 31, 44)
-                native.drawCircle(x, y, markerRadius, paint)
-                paint.color = android.graphics.Color.WHITE
-                native.drawText(marker.stepNumber.toString(), x, y + paint.textSize * 0.34f, paint)
-            }
+            RouteArrowRenderer.draw(
+                canvas = native,
+                path = path,
+                bounds = android.graphics.RectF(0f, 0f, size.width, size.height),
+                columns = board.columns,
+                rows = board.rows,
+                density = density,
+            )
         }
     }
 }

@@ -3,7 +3,6 @@ package com.example.phoneapp.capture
 import android.app.Service
 import android.content.Intent
 import android.graphics.Canvas
-import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.os.Build
@@ -13,7 +12,7 @@ import android.view.View
 import android.view.WindowManager
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardPosition
-import com.example.phoneapp.board.RouteStepMarkerLayout
+import com.example.phoneapp.board.RouteArrowRenderer
 import android.widget.TextView
 
 class SolutionOverlayService : Service() {
@@ -114,57 +113,27 @@ class SolutionOverlayService : Service() {
         private val captureWidth: Int,
         private val captureHeight: Int,
     ) : View(context) {
-        private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xEEFFFFFF.toInt()
-            style = Paint.Style.STROKE
-            strokeWidth = 7f * resources.displayMetrics.density
-            strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
-            setShadowLayer(4f, 1f, 2f, 0xFF111827.toInt())
-        }
-        private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xE522354A.toInt()
-            style = Paint.Style.FILL
-        }
-        private val numberPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            textAlign = Paint.Align.CENTER
-            textSize = 15f * resources.displayMetrics.density
-            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-            setShadowLayer(2f, 0f, 1f, android.graphics.Color.BLACK)
-        }
-        private val badgeRadius = 13f * resources.displayMetrics.density
-
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             if (path.isEmpty()) return
             val scaleX = width.toFloat() / captureWidth
             val scaleY = height.toFloat() / captureHeight
-            val cellWidth = boardBounds.width() / Board.DEFAULT_COLUMNS * scaleX
-            val cellHeight = boardBounds.height() / Board.DEFAULT_ROWS * scaleY
             val positions = path.map { index ->
-                val position = BoardPosition(index / Board.DEFAULT_COLUMNS, index % Board.DEFAULT_COLUMNS)
-                position
+                BoardPosition(index / Board.DEFAULT_COLUMNS, index % Board.DEFAULT_COLUMNS)
             }
-            val points = positions.map { position ->
-                ((boardBounds.left + (position.column + 0.5f) * boardBounds.width() / Board.DEFAULT_COLUMNS) * scaleX) to
-                    ((boardBounds.top + (position.row + 0.5f) * boardBounds.height() / Board.DEFAULT_ROWS) * scaleY)
-            }
-            for (index in 0 until points.lastIndex) {
-                val from = points[index]
-                val to = points[index + 1]
-                canvas.drawLine(from.first, from.second, to.first, to.second, linePaint)
-            }
-            val normalTextSize = maxOf(11f * resources.displayMetrics.density, minOf(cellWidth, cellHeight) * 0.18f)
-            RouteStepMarkerLayout.place(positions).forEach { marker ->
-                val point = (boardBounds.left + marker.gridX * boardBounds.width() / Board.DEFAULT_COLUMNS) * scaleX to
-                    (boardBounds.top + marker.gridY * boardBounds.height() / Board.DEFAULT_ROWS) * scaleY
-                val radius = if (marker.isStart) badgeRadius * 1.05f else maxOf(minOf(cellWidth, cellHeight) * 0.22f, badgeRadius)
-                numberPaint.textSize = normalTextSize
-                canvas.drawCircle(point.first, point.second, radius, badgePaint)
-                val textY = point.second - (numberPaint.ascent() + numberPaint.descent()) / 2f
-                canvas.drawText(marker.stepNumber.toString(), point.first, textY, numberPaint)
-            }
+            RouteArrowRenderer.draw(
+                canvas = canvas,
+                path = positions,
+                bounds = RectF(
+                    boardBounds.left * scaleX,
+                    boardBounds.top * scaleY,
+                    boardBounds.right * scaleX,
+                    boardBounds.bottom * scaleY,
+                ),
+                columns = Board.DEFAULT_COLUMNS,
+                rows = Board.DEFAULT_ROWS,
+                density = resources.displayMetrics.density,
+            )
         }
     }
 
