@@ -61,6 +61,7 @@ import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardPosition
 import com.example.phoneapp.board.RouteStepMarkerLayout
 import com.example.phoneapp.board.OrbColor
+import com.example.phoneapp.board.OrbModifier
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.solver.BoardSolution
 
@@ -182,7 +183,7 @@ private fun SolveSettingsDrawer(
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "Estimate uses match size and total combos only. Team and enemy modifiers are not included.",
+                                "Estimate includes match size, combos, and + orbs. Team and enemy modifiers are not included.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -401,6 +402,17 @@ fun OrbBoard(
                     paint.style = android.graphics.Paint.Style.STROKE
                     paint.strokeWidth = radius * 0.13f
                     native.drawCircle(centerX, centerY, radius * 0.86f, paint)
+                }
+
+                if (OrbModifier.ENHANCED in board.orbs[row * board.columns + column].modifiers) {
+                    paint.style = android.graphics.Paint.Style.FILL
+                    paint.color = android.graphics.Color.rgb(20, 31, 44)
+                    native.drawCircle(centerX + radius * 0.55f, centerY + radius * 0.55f, radius * 0.24f, paint)
+                    paint.color = android.graphics.Color.rgb(255, 221, 74)
+                    paint.textAlign = android.graphics.Paint.Align.CENTER
+                    paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+                    paint.textSize = radius * 0.43f
+                    native.drawText("+", centerX + radius * 0.55f, centerY + radius * 0.72f, paint)
                 }
             }
         }

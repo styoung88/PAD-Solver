@@ -3,6 +3,7 @@ package com.example.phoneapp.board
 data class OrbMatch(
     val color: OrbColor,
     val positions: Set<BoardPosition>,
+    val enhancedOrbCount: Int = 0,
 ) {
     val size: Int get() = positions.size
 }
@@ -79,7 +80,15 @@ object BoardAnalyzer {
                         }
                     }
                 }
-                groups.add(OrbMatch(color, positions))
+                groups.add(
+                    OrbMatch(
+                        color = color,
+                        positions = positions,
+                        enhancedOrbCount = positions.count { position ->
+                            OrbModifier.ENHANCED in board[position].modifiers
+                        },
+                    ),
+                )
             }
         }
         return BoardAnalysis(groups)

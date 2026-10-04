@@ -19,7 +19,7 @@ Keep `minSdk` at 26 for now. This does not restrict features on the Pixel 9. If 
 ## Later decisions
 
 - Add screenshot selection from the phone.
-- Recognize hazards, locks, and enhanced-orb markers.
+- Recognize hazards and locks.
 - Define the complexity slider's path-cost measure and solve-goal options.
 - Review Android 17 (API 37) behavior changes as features and permissions are added.
 - Replace the placeholder application ID before publishing.

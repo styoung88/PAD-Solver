@@ -6,6 +6,7 @@ import android.graphics.RectF
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.Orb
 import com.example.phoneapp.board.OrbColor
+import com.example.phoneapp.board.OrbModifier
 import kotlin.math.abs
 
 sealed interface BoardRecognition {
@@ -75,7 +76,26 @@ class PadBoardRecognizer {
         }
 
         return BoardRecognition.Recognized(
-            board = Board(orbs = candidate.colors.map(::Orb)),
+            board = Board(
+                orbs = candidate.colors.mapIndexed { index, color ->
+                    val row = index / Board.DEFAULT_COLUMNS
+                    val column = index % Board.DEFAULT_COLUMNS
+                    val centerX = candidate.left + (column + 0.5f) * candidate.width / Board.DEFAULT_COLUMNS
+                    val centerY = candidate.top + (row + 0.5f) * candidate.height / Board.DEFAULT_ROWS
+                    val modifiers = if (color != OrbColor.UNKNOWN && hasEnhancedMarker(
+                            bitmap,
+                            centerX,
+                            centerY,
+                            candidate.width / Board.DEFAULT_COLUMNS,
+                        )
+                    ) {
+                        setOf(OrbModifier.ENHANCED)
+                    } else {
+                        emptySet()
+                    }
+                    Orb(color, modifiers)
+                },
+            ),
             boardBounds = RectF(
                 candidate.left,
                 candidate.top,
@@ -174,6 +194,72 @@ class PadBoardRecognizer {
             hue < RED_WRAP_HUE_MIN -> OrbColor.HEART
             else -> null
         }
+    }
+
+    /** Detects the small gold + glyph near the lower-right of an enhanced orb. */
+    private fun hasEnhancedMarker(bitmap: Bitmap, centerX: Float, centerY: Float, cellSize: Float): Boolean {
+        val markerCenterX = centerX + cellSize * ENHANCED_MARKER_OFFSET
+        val markerCenterY = centerY + cellSize * ENHANCED_MARKER_OFFSET
+        val sampleRadius = (cellSize * ENHANCED_MARKER_SAMPLE_RADIUS).toInt().coerceAtLeast(1)
+        val patchStep = (sampleRadius / 2).coerceAtLeast(1)
+        val hsv = FloatArray(3)
+        var goldPatches = 0
+
+        for ((offsetX, offsetY) in ENHANCED_MARKER_PLUS_POINTS) {
+            if (hasGoldPatch(
+                    bitmap,
+                    markerCenterX + offsetX * cellSize * ENHANCED_MARKER_ARM_SPACING,
+                    markerCenterY + offsetY * cellSize * ENHANCED_MARKER_ARM_SPACING,
+                    sampleRadius,
+                    patchStep,
+                    hsv,
+                )
+            ) goldPatches++
+        }
+
+        var goldControlPatches = 0
+        for ((offsetX, offsetY) in ENHANCED_MARKER_DIAGONAL_POINTS) {
+            if (hasGoldPatch(
+                    bitmap,
+                    markerCenterX + offsetX * cellSize * ENHANCED_MARKER_ARM_SPACING,
+                    markerCenterY + offsetY * cellSize * ENHANCED_MARKER_ARM_SPACING,
+                    sampleRadius,
+                    patchStep,
+                    hsv,
+                )
+            ) goldControlPatches++
+        }
+        return goldPatches >= MIN_ENHANCED_PLUS_PATCHES && goldControlPatches <= MAX_ENHANCED_CONTROL_PATCHES
+    }
+
+    private fun hasGoldPatch(
+        bitmap: Bitmap,
+        centerX: Float,
+        centerY: Float,
+        radius: Int,
+        step: Int,
+        hsv: FloatArray,
+    ): Boolean {
+        var goldPixels = 0
+        var sampledPixels = 0
+        val left = (centerX.toInt() - radius).coerceAtLeast(0)
+        val right = (centerX.toInt() + radius).coerceAtMost(bitmap.width - 1)
+        val top = (centerY.toInt() - radius).coerceAtLeast(0)
+        val bottom = (centerY.toInt() + radius).coerceAtMost(bitmap.height - 1)
+        var y = top
+        while (y <= bottom) {
+            var x = left
+            while (x <= right) {
+                Color.colorToHSV(bitmap.getPixel(x, y), hsv)
+                if (hsv[0] in ENHANCED_GOLD_HUE_RANGE &&
+                    hsv[1] >= ENHANCED_GOLD_MIN_SATURATION && hsv[2] >= ENHANCED_GOLD_MIN_BRIGHTNESS
+                ) goldPixels++
+                sampledPixels++
+                x += step
+            }
+            y += step
+        }
+        return sampledPixels > 0 && goldPixels.toFloat() / sampledPixels >= ENHANCED_PATCH_GOLD_FRACTION
     }
 
     private data class Candidate(
@@ -284,5 +370,27 @@ class PadBoardRecognizer {
         const val MAP_SCALE = 2
         const val SOURCE_ROWS_PER_BATCH = 16
         const val NO_COLOR = -1
+        const val ENHANCED_MARKER_OFFSET = 0.27f
+        const val ENHANCED_MARKER_ARM_SPACING = 0.045f
+        const val ENHANCED_MARKER_SAMPLE_RADIUS = 0.012f
+        const val ENHANCED_GOLD_MIN_SATURATION = 0.48f
+        const val ENHANCED_GOLD_MIN_BRIGHTNESS = 0.68f
+        const val ENHANCED_PATCH_GOLD_FRACTION = 0.36f
+        val ENHANCED_GOLD_HUE_RANGE = 35f..70f
+        const val MIN_ENHANCED_PLUS_PATCHES = 4
+        const val MAX_ENHANCED_CONTROL_PATCHES = 1
+        val ENHANCED_MARKER_PLUS_POINTS = arrayOf(
+            0f to 0f,
+            -1f to 0f,
+            1f to 0f,
+            0f to -1f,
+            0f to 1f,
+        )
+        val ENHANCED_MARKER_DIAGONAL_POINTS = arrayOf(
+            -1f to -1f,
+            1f to -1f,
+            -1f to 1f,
+            1f to 1f,
+        )
     }
 }

@@ -20,7 +20,7 @@ Install SDK Platform 37 and Android SDK Build Tools 36.0.0 from Android Studio's
 
 Each screen-capture session requires system approval. Notifications are needed for the capture action on Android 13 and later. Captured images are kept in the app's private storage and are excluded from Android backup. They are not sent over the network.
 
-The initial recognizer supports the six ordinary orb colors and hearts. Hazards are not supported yet; uncertain captures ask for a new capture. Locked and enhanced properties have a place in the board model but are not detected in this version. Board recognition uses a first-pass image heuristic and may need tuning against real screenshots.
+The recognizer supports the six ordinary orb colors and hearts, and detects enhanced (+) orbs using the marker near each orb's lower-right edge. The marker detector is a visual heuristic and should be checked against more device captures. Hazards and locks are not supported yet; uncertain captures ask for a new capture. The board-only color-damage estimate includes the 6% per enhanced orb match bonus, but excludes team awakenings and other team or enemy modifiers.
 
 The solver uses a bounded beam search to find high-combo routes and prefers shorter routes when combo counts tie. It does not use the in-game timer. Like other bounded searches, it is not guaranteed to find the global optimum; the search objective and move bound are isolated so future goal types and complexity settings can be added.
 

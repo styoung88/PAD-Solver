@@ -41,7 +41,7 @@ data class MaximizeColorDamage(val color: OrbColor) : SolveGoal {
     override val preferredColor: OrbColor get() = color
 
     override fun evaluate(analysis: BoardAnalysis): GoalEvaluation =
-        GoalEvaluation(satisfied = true, primaryScore = ColorDamageEstimate.scoreInSixteenths(analysis, color))
+        GoalEvaluation(satisfied = true, primaryScore = ColorDamageEstimate.scoreRelativeDamage(analysis, color))
 
     private companion object {
         val ATTACK_COLORS = setOf(OrbColor.FIRE, OrbColor.WATER, OrbColor.WOOD, OrbColor.LIGHT, OrbColor.DARK)
@@ -51,14 +51,17 @@ data class MaximizeColorDamage(val color: OrbColor) : SolveGoal {
 /**
  * A relative board score, not a prediction of actual damage. It models only
  * the size factor of each focused-color match and the global combo factor.
- * Both factors advance in quarter steps, so their product is stored in 1/16ths.
+ * Both factors advance in quarter steps. Enhanced orbs add 6% each to their
+ * individual match, represented as a percent multiplier on the same score.
  */
 object ColorDamageEstimate {
-    fun scoreInSixteenths(analysis: BoardAnalysis, color: OrbColor): Int {
+    fun scoreRelativeDamage(analysis: BoardAnalysis, color: OrbColor): Int {
         val comboFactorInQuarters = analysis.comboCount + 3
         return analysis.allMatches.asSequence()
             .filter { it.color == color }
-            .sumOf { match -> comboFactorInQuarters * (match.size + 1) }
+            .sumOf { match ->
+                comboFactorInQuarters * (match.size + 1) * (100 + 6 * match.enhancedOrbCount)
+            }
     }
 }
 
