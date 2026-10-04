@@ -407,12 +407,12 @@ fun OrbBoard(
                 if (OrbModifier.ENHANCED in board.orbs[row * board.columns + column].modifiers) {
                     paint.style = android.graphics.Paint.Style.FILL
                     paint.color = android.graphics.Color.rgb(20, 31, 44)
-                    native.drawCircle(centerX + radius * 0.55f, centerY + radius * 0.55f, radius * 0.24f, paint)
+                    native.drawCircle(centerX + radius * 0.55f, centerY + radius * 0.55f, radius * 0.29f, paint)
                     paint.color = android.graphics.Color.rgb(255, 221, 74)
                     paint.textAlign = android.graphics.Paint.Align.CENTER
                     paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-                    paint.textSize = radius * 0.43f
-                    native.drawText("+", centerX + radius * 0.55f, centerY + radius * 0.72f, paint)
+                    paint.textSize = radius * 0.58f
+                    native.drawText("+", centerX + radius * 0.55f, centerY + radius * 0.75f, paint)
                 }
             }
         }
