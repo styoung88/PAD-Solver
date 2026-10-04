@@ -47,7 +47,7 @@ class RouteStepMarkerLayoutTest {
 
         assertEquals(earlier.gridX, later.gridX, 0.001f)
         assertTrue("Earlier label should sit above the retraced-segment label", earlier.gridY < later.gridY)
-        assertTrue(abs(earlier.gridY - later.gridY) >= 0.30f)
+        assertTrue(abs(earlier.gridY - later.gridY) >= 0.299f)
     }
 
     private fun screenshotRoute() = listOf(

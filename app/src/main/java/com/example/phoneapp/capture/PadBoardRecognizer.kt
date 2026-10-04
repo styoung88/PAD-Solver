@@ -69,7 +69,6 @@ class PadBoardRecognizer {
 
         val candidate = best ?: return BoardRecognition.Uncertain(0)
         if (candidate.recognized < MIN_RECOGNIZED_CELLS ||
-            candidate.colorVariety < MIN_COLOR_VARIETY ||
             candidate.averageColorSupport < MIN_AVERAGE_COLOR_SUPPORT
         ) {
             return BoardRecognition.Uncertain(candidate.recognized)
@@ -391,7 +390,6 @@ class PadBoardRecognizer {
         const val MIN_BRIGHTNESS = 0.20f
         const val MIN_AVERAGE_COLOR_SUPPORT = 0.30f
         const val MIN_RECOGNIZED_CELLS = Board.DEFAULT_COLUMNS * Board.DEFAULT_ROWS
-        const val MIN_COLOR_VARIETY = 4
         const val MAP_SCALE = 2
         const val SOURCE_ROWS_PER_BATCH = 16
         const val NO_COLOR = -1
