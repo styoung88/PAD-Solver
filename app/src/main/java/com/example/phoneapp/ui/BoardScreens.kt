@@ -141,11 +141,9 @@ fun BoardPreviewScreen(
             SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
             Spacer(Modifier.height(12.dp))
             if (isSolving) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.height(8.dp))
-                Text("Finding a route…")
+                SolveProgressIndicator("Finding a route…")
+                Spacer(Modifier.height(12.dp))
             }
-            Spacer(Modifier.height(12.dp))
             OutlinedButton(onClick = onNewBoard, enabled = !isSolving) { Text("New board") }
             }
         }
@@ -331,6 +329,10 @@ fun SolutionScreen(
             OrbBoard(board = board)
             Spacer(Modifier.height(18.dp))
             SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
+            if (isSolving) {
+                Spacer(Modifier.height(12.dp))
+                SolveProgressIndicator("Recalculating route…")
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onNewBoard) { Text("New board") }
         } else {
@@ -365,6 +367,10 @@ fun SolutionScreen(
             Text("Start at 1, then follow each number along the path.")
             Spacer(Modifier.height(18.dp))
             SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
+            if (isSolving) {
+                Spacer(Modifier.height(12.dp))
+                SolveProgressIndicator("Recalculating route…")
+            }
             Spacer(Modifier.height(8.dp))
             Button(onClick = onShowInGame, enabled = !isSolving) { Text("Show route in PAD") }
             Spacer(Modifier.height(8.dp))
@@ -372,6 +378,17 @@ fun SolutionScreen(
         }
     }
 }
+}
+
+@Composable
+private fun SolveProgressIndicator(message: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+        Text(message)
+    }
 }
 
 @Composable
