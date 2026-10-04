@@ -198,38 +198,63 @@ class PadBoardRecognizer {
 
     /** Detects the small gold + glyph near the lower-right of an enhanced orb. */
     private fun hasEnhancedMarker(bitmap: Bitmap, centerX: Float, centerY: Float, cellSize: Float): Boolean {
-        val markerCenterX = centerX + cellSize * ENHANCED_MARKER_OFFSET
-        val markerCenterY = centerY + cellSize * ENHANCED_MARKER_OFFSET
         val sampleRadius = (cellSize * ENHANCED_MARKER_SAMPLE_RADIUS).toInt().coerceAtLeast(1)
-        val patchStep = (sampleRadius / 2).coerceAtLeast(1)
+        val patchStep = sampleRadius
         val hsv = FloatArray(3)
-        var goldPatches = 0
+        var bestPlusScore = 0
+        var bestControlScore = Int.MAX_VALUE
 
-        for ((offsetX, offsetY) in ENHANCED_MARKER_PLUS_POINTS) {
-            if (hasGoldPatch(
-                    bitmap,
-                    markerCenterX + offsetX * cellSize * ENHANCED_MARKER_ARM_SPACING,
-                    markerCenterY + offsetY * cellSize * ENHANCED_MARKER_ARM_SPACING,
-                    sampleRadius,
-                    patchStep,
-                    hsv,
-                )
-            ) goldPatches++
-        }
+        // PAD's badge sits at the lower-right edge, but its apparent offset and
+        // size vary with orb art and screenshot scaling. Search a normalized
+        // area around that corner instead of relying on one exact sample point.
+        var markerOffsetY = ENHANCED_MARKER_MIN_Y_OFFSET
+        while (markerOffsetY <= ENHANCED_MARKER_MAX_Y_OFFSET) {
+            var markerOffsetX = ENHANCED_MARKER_MIN_X_OFFSET
+            while (markerOffsetX <= ENHANCED_MARKER_MAX_X_OFFSET) {
+                val markerCenterX = centerX + cellSize * markerOffsetX
+                val markerCenterY = centerY + cellSize * markerOffsetY
+                for (armSpacing in ENHANCED_MARKER_ARM_SPACINGS) {
+                    var goldPatches = 0
+                    for ((offsetX, offsetY) in ENHANCED_MARKER_PLUS_POINTS) {
+                        if (hasGoldPatch(
+                                bitmap,
+                                markerCenterX + offsetX * cellSize * armSpacing,
+                                markerCenterY + offsetY * cellSize * armSpacing,
+                                sampleRadius,
+                                patchStep,
+                                hsv,
+                            )
+                        ) goldPatches++
+                    }
 
-        var goldControlPatches = 0
-        for ((offsetX, offsetY) in ENHANCED_MARKER_DIAGONAL_POINTS) {
-            if (hasGoldPatch(
-                    bitmap,
-                    markerCenterX + offsetX * cellSize * ENHANCED_MARKER_ARM_SPACING,
-                    markerCenterY + offsetY * cellSize * ENHANCED_MARKER_ARM_SPACING,
-                    sampleRadius,
-                    patchStep,
-                    hsv,
-                )
-            ) goldControlPatches++
+                    var goldControlPatches = 0
+                    for ((offsetX, offsetY) in ENHANCED_MARKER_DIAGONAL_POINTS) {
+                        if (hasGoldPatch(
+                                bitmap,
+                                markerCenterX + offsetX * cellSize * armSpacing,
+                                markerCenterY + offsetY * cellSize * armSpacing,
+                                sampleRadius,
+                                patchStep,
+                                hsv,
+                            )
+                        ) goldControlPatches++
+                    }
+                    if (goldPatches > bestPlusScore ||
+                        (goldPatches == bestPlusScore && goldControlPatches < bestControlScore)
+                    ) {
+                        bestPlusScore = goldPatches
+                        bestControlScore = goldControlPatches
+                    }
+                    if (goldPatches >= MIN_ENHANCED_PLUS_PATCHES &&
+                        goldControlPatches <= MAX_ENHANCED_CONTROL_PATCHES
+                    ) return true
+                }
+                markerOffsetX += ENHANCED_MARKER_OFFSET_STEP
+            }
+            markerOffsetY += ENHANCED_MARKER_OFFSET_STEP
         }
-        return goldPatches >= MIN_ENHANCED_PLUS_PATCHES && goldControlPatches <= MAX_ENHANCED_CONTROL_PATCHES
+        return bestPlusScore >= MIN_ENHANCED_PLUS_PATCHES &&
+            bestControlScore <= MAX_ENHANCED_CONTROL_PATCHES
     }
 
     private fun hasGoldPatch(
@@ -370,15 +395,19 @@ class PadBoardRecognizer {
         const val MAP_SCALE = 2
         const val SOURCE_ROWS_PER_BATCH = 16
         const val NO_COLOR = -1
-        const val ENHANCED_MARKER_OFFSET = 0.27f
-        const val ENHANCED_MARKER_ARM_SPACING = 0.045f
-        const val ENHANCED_MARKER_SAMPLE_RADIUS = 0.012f
-        const val ENHANCED_GOLD_MIN_SATURATION = 0.48f
-        const val ENHANCED_GOLD_MIN_BRIGHTNESS = 0.68f
-        const val ENHANCED_PATCH_GOLD_FRACTION = 0.36f
+        const val ENHANCED_MARKER_MIN_X_OFFSET = 0.12f
+        const val ENHANCED_MARKER_MAX_X_OFFSET = 0.38f
+        const val ENHANCED_MARKER_MIN_Y_OFFSET = 0.20f
+        const val ENHANCED_MARKER_MAX_Y_OFFSET = 0.52f
+        const val ENHANCED_MARKER_OFFSET_STEP = 0.04f
+        const val ENHANCED_MARKER_SAMPLE_RADIUS = 0.014f
+        const val ENHANCED_GOLD_MIN_SATURATION = 0.88f
+        const val ENHANCED_GOLD_MIN_BRIGHTNESS = 0.82f
+        const val ENHANCED_PATCH_GOLD_FRACTION = 0.24f
         val ENHANCED_GOLD_HUE_RANGE = 35f..70f
         const val MIN_ENHANCED_PLUS_PATCHES = 4
         const val MAX_ENHANCED_CONTROL_PATCHES = 1
+        val ENHANCED_MARKER_ARM_SPACINGS = floatArrayOf(0.03f, 0.045f, 0.06f)
         val ENHANCED_MARKER_PLUS_POINTS = arrayOf(
             0f to 0f,
             -1f to 0f,
