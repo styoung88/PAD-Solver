@@ -224,7 +224,13 @@ class MainActivity : ComponentActivity() {
                 else -> MaximizeCombos
             }
             runCatching { BoardSolver().solve(board, SolveOptions(goal = goal)) }
-                .onSuccess { solution = it }
+                .onSuccess { result ->
+                    solution = result
+                    if (result.targetComboCount != null && !result.goalSatisfied) {
+                        stopService(Intent(this@MainActivity, SolutionOverlayService::class.java)
+                            .setAction(SolutionOverlayService.ACTION_HIDE))
+                    }
+                }
                 .onFailure {
                     Toast.makeText(this@MainActivity, "Could not find a route. Please try again.", Toast.LENGTH_LONG).show()
                 }

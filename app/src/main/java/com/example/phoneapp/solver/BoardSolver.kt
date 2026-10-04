@@ -71,14 +71,14 @@ data class TargetComboCount(
 
     override fun evaluate(analysis: BoardAnalysis): GoalEvaluation {
         val reachedTarget = analysis.comboCount >= target
-        val afterTargetScore = if (reachedTarget && color != null) {
+        val objectiveScore = if (reachedTarget && color != null) {
             ColorDamageEstimate.scoreRelativeDamage(analysis, color)
         } else {
             analysis.comboCount
         }
         return GoalEvaluation(
             satisfied = reachedTarget,
-            primaryScore = afterTargetScore,
+            primaryScore = objectiveScore,
             secondaryScore = analysis.comboCount,
         )
     }

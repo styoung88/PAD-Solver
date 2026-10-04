@@ -286,40 +286,57 @@ fun SolutionScreen(
         actionLabel = if (isSolving) "Recalculating route…" else "Apply and recalculate",
         onApply = { onRecalculate(preferredColor, targetComboCount) },
     ) { openSettings ->
+        val missedTarget = solution.targetComboCount?.takeIf { !solution.goalSatisfied }
         Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Suggested route", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(6.dp))
-        val cascadeCount = solution.predictedMatches.cascadeCount
-        val cascadeSummary = when (cascadeCount) {
-            0 -> ""
-            1 -> " · 1 cascade"
-            else -> " · $cascadeCount cascades"
-        }
-        Text("${solution.comboCount} combos · ${solution.orbMoves} orb moves$cascadeSummary")
-        solution.targetComboCount?.let { target ->
+        if (missedTarget != null) {
+            Text("Criteria not met", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(4.dp))
             Text(
-                if (solution.goalSatisfied) "Target: $target combos reached" else "Target: $target combos not reached",
-                color = if (solution.goalSatisfied) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.error,
+                "Could not find a route that reaches at least $missedTarget combos. " +
+                    "The best result found was ${solution.comboCount} combos.",
+                color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
             )
+            Spacer(Modifier.height(16.dp))
+            OrbBoard(board = board)
+            Spacer(Modifier.height(18.dp))
+            SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onNewBoard) { Text("New board") }
+        } else {
+            Text("Suggested route", style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(6.dp))
+            val cascadeCount = solution.predictedMatches.cascadeCount
+            val cascadeSummary = when (cascadeCount) {
+                0 -> ""
+                1 -> " · 1 cascade"
+                else -> " · $cascadeCount cascades"
+            }
+            Text("${solution.comboCount} combos · ${solution.orbMoves} orb moves$cascadeSummary")
+            solution.targetComboCount?.let { target ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Target: $target combos reached",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            OrbBoard(board = board, matches = solution.predictedMatches, path = solution.path)
+            Spacer(Modifier.height(12.dp))
+            Text("Start at 1, then follow each number along the path.")
+            Spacer(Modifier.height(18.dp))
+            SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onShowInGame, enabled = !isSolving) { Text("Show route in PAD") }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onNewBoard) { Text("New board") }
         }
-        Spacer(Modifier.height(16.dp))
-        OrbBoard(board = board, matches = solution.predictedMatches, path = solution.path)
-        Spacer(Modifier.height(12.dp))
-        Text("Start at 1, then follow each number along the path.")
-        Spacer(Modifier.height(18.dp))
-        SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = onShowInGame, enabled = !isSolving) { Text("Show route in PAD") }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onNewBoard) { Text("New board") }
     }
 }
 }
