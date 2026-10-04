@@ -15,6 +15,7 @@ import kotlin.coroutines.coroutineContext
 data class GoalEvaluation(
     val satisfied: Boolean,
     val primaryScore: Int,
+    val secondaryScore: Int = 0,
 )
 
 /**
@@ -25,6 +26,7 @@ fun interface SolveGoal {
     fun evaluate(analysis: BoardAnalysis): GoalEvaluation
 
     val preferredColor: OrbColor? get() = null
+    val targetComboCount: Int? get() = null
 }
 
 object MaximizeCombos : SolveGoal {
@@ -41,7 +43,45 @@ data class MaximizeColorDamage(val color: OrbColor) : SolveGoal {
     override val preferredColor: OrbColor get() = color
 
     override fun evaluate(analysis: BoardAnalysis): GoalEvaluation =
-        GoalEvaluation(satisfied = true, primaryScore = ColorDamageEstimate.scoreRelativeDamage(analysis, color))
+        GoalEvaluation(
+            satisfied = true,
+            primaryScore = ColorDamageEstimate.scoreRelativeDamage(analysis, color),
+            secondaryScore = analysis.comboCount,
+        )
+
+    private companion object {
+        val ATTACK_COLORS = setOf(OrbColor.FIRE, OrbColor.WATER, OrbColor.WOOD, OrbColor.LIGHT, OrbColor.DARK)
+    }
+}
+
+/** First reach a combo threshold, then rank those routes by the chosen color objective. */
+data class TargetComboCount(
+    val target: Int,
+    val color: OrbColor? = null,
+) : SolveGoal {
+    init {
+        require(target > 0)
+        require(color == null || color in ATTACK_COLORS) {
+            "A damage focus must use an attacking orb color."
+        }
+    }
+
+    override val preferredColor: OrbColor? get() = color
+    override val targetComboCount: Int get() = target
+
+    override fun evaluate(analysis: BoardAnalysis): GoalEvaluation {
+        val reachedTarget = analysis.comboCount >= target
+        val afterTargetScore = if (reachedTarget && color != null) {
+            ColorDamageEstimate.scoreRelativeDamage(analysis, color)
+        } else {
+            analysis.comboCount
+        }
+        return GoalEvaluation(
+            satisfied = reachedTarget,
+            primaryScore = afterTargetScore,
+            secondaryScore = analysis.comboCount,
+        )
+    }
 
     private companion object {
         val ATTACK_COLORS = setOf(OrbColor.FIRE, OrbColor.WATER, OrbColor.WOOD, OrbColor.LIGHT, OrbColor.DARK)
@@ -83,6 +123,7 @@ data class BoardSolution(
     val predictedMatches: BoardAnalysis,
     val goalSatisfied: Boolean,
     val preferredColor: OrbColor? = null,
+    val targetComboCount: Int? = null,
 ) {
     val comboCount: Int get() = predictedMatches.comboCount
     val orbMoves: Int get() = (path.size - 1).coerceAtLeast(0)
@@ -158,6 +199,7 @@ class BoardSolver {
             predictedMatches = best.analysis,
             goalSatisfied = best.goal.satisfied,
             preferredColor = options.goal.preferredColor,
+            targetComboCount = options.goal.targetComboCount,
         )
     }
 
@@ -170,6 +212,9 @@ class BoardSolver {
         if (left.goal.satisfied != right.goal.satisfied) return right.goal.satisfied.compareTo(left.goal.satisfied)
         if (left.goal.primaryScore != right.goal.primaryScore) {
             return right.goal.primaryScore.compareTo(left.goal.primaryScore)
+        }
+        if (left.goal.secondaryScore != right.goal.secondaryScore) {
+            return right.goal.secondaryScore.compareTo(left.goal.secondaryScore)
         }
         if (left.analysis.comboCount != right.analysis.comboCount) {
             return right.analysis.comboCount.compareTo(left.analysis.comboCount)
@@ -184,6 +229,9 @@ class BoardSolver {
         if (candidate.goal.satisfied != best.goal.satisfied) return candidate.goal.satisfied
         if (candidate.goal.primaryScore != best.goal.primaryScore) {
             return candidate.goal.primaryScore > best.goal.primaryScore
+        }
+        if (candidate.goal.secondaryScore != best.goal.secondaryScore) {
+            return candidate.goal.secondaryScore > best.goal.secondaryScore
         }
         if (candidate.analysis.comboCount != best.analysis.comboCount) {
             return candidate.analysis.comboCount > best.analysis.comboCount

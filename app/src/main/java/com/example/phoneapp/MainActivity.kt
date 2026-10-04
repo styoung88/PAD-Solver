@@ -38,6 +38,7 @@ import com.example.phoneapp.solver.BoardSolver
 import com.example.phoneapp.solver.MaximizeColorDamage
 import com.example.phoneapp.solver.MaximizeCombos
 import com.example.phoneapp.solver.SolveOptions
+import com.example.phoneapp.solver.TargetComboCount
 import com.example.phoneapp.ui.BoardPreviewScreen
 import com.example.phoneapp.ui.HomeScreen
 import com.example.phoneapp.ui.SolutionScreen
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
     private var recognition by mutableStateOf<BoardRecognition?>(null)
     private var solution by mutableStateOf<BoardSolution?>(null)
     private var preferredColor by mutableStateOf<OrbColor?>(null)
+    private var targetComboCount by mutableStateOf<Int?>(null)
     private var isReadingCapture by mutableStateOf(false)
     private var isSolving by mutableStateOf(false)
     private var pendingRoutePermission = false
@@ -96,6 +98,9 @@ class MainActivity : ComponentActivity() {
         preferredColor = getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE)
             .getString(PREFERRED_COLOR_KEY, null)
             ?.let { value -> runCatching { OrbColor.valueOf(value) }.getOrNull() }
+        targetComboCount = getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE)
+            .getInt(TARGET_COMBO_COUNT_KEY, 0)
+            .takeIf { it > 0 }
         intent.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(::loadCapture)
         setContent {
             MaterialTheme {
@@ -108,8 +113,10 @@ class MainActivity : ComponentActivity() {
                                 board = board,
                                 solution = solution!!,
                                 preferredColor = preferredColor,
+                                targetComboCount = targetComboCount,
                                 isSolving = isSolving,
                                 onPreferredColorChanged = ::updatePreferredColor,
+                                onTargetComboCountChanged = ::updateTargetComboCount,
                                 onRecalculate = ::solveBoard,
                                 onShowInGame = { showSolutionInPad(solution!!) },
                                 onNewBoard = { resetToHome() },
@@ -119,7 +126,9 @@ class MainActivity : ComponentActivity() {
                             recognition = recognition!!,
                             isSolving = isSolving,
                             preferredColor = preferredColor,
+                            targetComboCount = targetComboCount,
                             onPreferredColorChanged = ::updatePreferredColor,
+                            onTargetComboCountChanged = ::updateTargetComboCount,
                             onSolve = ::solveBoard,
                             onNewBoard = ::resetToHome,
                         )
@@ -202,11 +211,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun solveBoard(color: OrbColor? = preferredColor) {
+    private fun solveBoard(
+        color: OrbColor? = preferredColor,
+        targetComboCount: Int? = this.targetComboCount,
+    ) {
         val board = (recognition as? BoardRecognition.Recognized)?.board ?: return
         isSolving = true
         lifecycleScope.launch {
-            val goal = color?.let(::MaximizeColorDamage) ?: MaximizeCombos
+            val goal = when {
+                targetComboCount != null -> TargetComboCount(targetComboCount, color)
+                color != null -> MaximizeColorDamage(color)
+                else -> MaximizeCombos
+            }
             runCatching { BoardSolver().solve(board, SolveOptions(goal = goal)) }
                 .onSuccess { solution = it }
                 .onFailure {
@@ -220,6 +236,13 @@ class MainActivity : ComponentActivity() {
         preferredColor = color
         getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE).edit().apply {
             if (color == null) remove(PREFERRED_COLOR_KEY) else putString(PREFERRED_COLOR_KEY, color.name)
+        }.apply()
+    }
+
+    private fun updateTargetComboCount(target: Int?) {
+        targetComboCount = target
+        getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE).edit().apply {
+            if (target == null) remove(TARGET_COMBO_COUNT_KEY) else putInt(TARGET_COMBO_COUNT_KEY, target)
         }.apply()
     }
 
@@ -275,6 +298,7 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val SOLVER_PREFERENCES = "solver_preferences"
         const val PREFERRED_COLOR_KEY = "preferred_orb_color"
+        const val TARGET_COMBO_COUNT_KEY = "target_combo_count"
     }
 }
 

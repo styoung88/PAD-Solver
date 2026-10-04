@@ -96,8 +96,10 @@ fun BoardPreviewScreen(
     recognition: BoardRecognition,
     isSolving: Boolean,
     preferredColor: OrbColor?,
+    targetComboCount: Int?,
     onPreferredColorChanged: (OrbColor?) -> Unit,
-    onSolve: (OrbColor?) -> Unit,
+    onTargetComboCountChanged: (Int?) -> Unit,
+    onSolve: (OrbColor?, Int?) -> Unit,
     onNewBoard: () -> Unit,
 ) {
     when (recognition) {
@@ -115,10 +117,12 @@ fun BoardPreviewScreen(
 
         is BoardRecognition.Recognized -> SolveSettingsDrawer(
             preferredColor = preferredColor,
+            targetComboCount = targetComboCount,
             isSolving = isSolving,
             onPreferredColorChanged = onPreferredColorChanged,
+            onTargetComboCountChanged = onTargetComboCountChanged,
             actionLabel = if (isSolving) "Solving…" else "Apply and solve",
-            onApply = { onSolve(preferredColor) },
+            onApply = { onSolve(preferredColor, targetComboCount) },
         ) { openSettings ->
             Column(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
@@ -148,8 +152,10 @@ fun BoardPreviewScreen(
 @Composable
 private fun SolveSettingsDrawer(
     preferredColor: OrbColor?,
+    targetComboCount: Int?,
     isSolving: Boolean,
     onPreferredColorChanged: (OrbColor?) -> Unit,
+    onTargetComboCountChanged: (Int?) -> Unit,
     actionLabel: String,
     onApply: () -> Unit,
     content: @Composable (openSettings: () -> Unit) -> Unit,
@@ -174,6 +180,14 @@ private fun SolveSettingsDrawer(
                     Spacer(Modifier.height(20.dp))
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text("Combo target", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(8.dp))
+                            ComboTargetDropdown(
+                                selectedTarget = targetComboCount,
+                                enabled = !isSolving,
+                                onTargetSelected = onTargetComboCountChanged,
+                            )
+                            Spacer(Modifier.height(16.dp))
                             Text("Color focus", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             OrbColorDropdown(
@@ -183,7 +197,8 @@ private fun SolveSettingsDrawer(
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "Estimate includes match size, combos, and + orbs. Team and enemy modifiers are not included.",
+                                "A combo target is prioritized first. After it is reached, color damage guides route selection. " +
+                                    "The estimate includes match size, combos, and + orbs; team and enemy modifiers are excluded.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -254,18 +269,22 @@ fun SolutionScreen(
     board: Board,
     solution: BoardSolution,
     preferredColor: OrbColor?,
+    targetComboCount: Int?,
     isSolving: Boolean,
     onPreferredColorChanged: (OrbColor?) -> Unit,
-    onRecalculate: (OrbColor?) -> Unit,
+    onTargetComboCountChanged: (Int?) -> Unit,
+    onRecalculate: (OrbColor?, Int?) -> Unit,
     onShowInGame: () -> Unit,
     onNewBoard: () -> Unit,
 ) {
     SolveSettingsDrawer(
         preferredColor = preferredColor,
+        targetComboCount = targetComboCount,
         isSolving = isSolving,
         onPreferredColorChanged = onPreferredColorChanged,
+        onTargetComboCountChanged = onTargetComboCountChanged,
         actionLabel = if (isSolving) "Recalculating route…" else "Apply and recalculate",
-        onApply = { onRecalculate(preferredColor) },
+        onApply = { onRecalculate(preferredColor, targetComboCount) },
     ) { openSettings ->
         Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -282,6 +301,15 @@ fun SolutionScreen(
             else -> " · $cascadeCount cascades"
         }
         Text("${solution.comboCount} combos · ${solution.orbMoves} orb moves$cascadeSummary")
+        solution.targetComboCount?.let { target ->
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (solution.goalSatisfied) "Target: $target combos reached" else "Target: $target combos not reached",
+                color = if (solution.goalSatisfied) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
         Spacer(Modifier.height(16.dp))
         OrbBoard(board = board, matches = solution.predictedMatches, path = solution.path)
         Spacer(Modifier.height(12.dp))
@@ -362,6 +390,50 @@ private fun OrbColorDropdown(
                     text = { Text(label) },
                     onClick = {
                         onColorSelected(color)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ComboTargetDropdown(
+    selectedTarget: Int?,
+    enabled: Boolean,
+    onTargetSelected: (Int?) -> Unit,
+) {
+    val choices = listOf(
+        null to "No minimum",
+        7 to "At least 7 combos",
+        10 to "At least 10 combos",
+    )
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = choices.first { it.first == selectedTarget }.second,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Minimum combos") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor(
+                type = androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable,
+                enabled = enabled,
+            ).fillMaxWidth(),
+            enabled = enabled,
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            choices.forEach { (target, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        onTargetSelected(target)
                         expanded = false
                     },
                 )
