@@ -27,6 +27,9 @@ data class GoalEvaluation(
 fun interface SolveGoal {
     fun evaluate(analysis: BoardAnalysis): GoalEvaluation
 
+    /** Lightweight heuristic for retaining incomplete required patterns during beam search. */
+    fun patternPotential(board: Board): Int = 0
+
     val preferredColor: OrbColor? get() = null
     val matchPatternFocus: MatchPattern? get() = null
     val targetComboCount: Int? get() = null
@@ -76,6 +79,8 @@ data class MaximizeMatchPattern(
                 ?: analysis.comboCount,
         )
     }
+
+    override fun patternPotential(board: Board): Int = pattern.potentialScore(board, color)
 }
 
 /** First reach a combo threshold, then rank those routes by the chosen color objective. */
@@ -118,6 +123,8 @@ data class TargetComboCount(
             secondaryScore = secondaryScore,
         )
     }
+
+    override fun patternPotential(board: Board): Int = pattern?.potentialScore(board, color) ?: 0
 
     private companion object {
         val ATTACK_COLORS = setOf(OrbColor.FIRE, OrbColor.WATER, OrbColor.WOOD, OrbColor.LIGHT, OrbColor.DARK)
@@ -229,9 +236,7 @@ class BoardSolver {
             }
             if (depth == options.maxOrbMoves || candidates.isEmpty()) break
 
-            beam = candidates.values
-                .sortedWith(::compareRanked)
-                .take(options.beamWidth)
+            beam = selectBeam(candidates.values, options.beamWidth, options.goal)
         }
 
         return BoardSolution(
@@ -253,8 +258,19 @@ class BoardSolver {
     }
 
     private fun rank(state: SearchState, columns: Int, rows: Int, goal: SolveGoal): RankedState {
-        val analysis = analyze(state.cells, columns, rows)
-        return RankedState(state, analysis, goal.evaluate(analysis), nearMatches(state.cells, columns, rows))
+        val board = Board(
+            columns = columns,
+            rows = rows,
+            orbs = state.cells.map { code -> Orb(colorOf(code), modifiersOf(code)) },
+        )
+        val analysis = BoardAnalyzer.resolveCascades(board)
+        return RankedState(
+            state = state,
+            analysis = analysis,
+            goal = goal.evaluate(analysis),
+            patternPotential = goal.patternPotential(board),
+            nearMatchCount = nearMatches(state.cells, columns, rows),
+        )
     }
 
     private fun compareRanked(left: RankedState, right: RankedState): Int {
@@ -264,6 +280,9 @@ class BoardSolver {
         }
         if (left.goal.primaryScore != right.goal.primaryScore) {
             return right.goal.primaryScore.compareTo(left.goal.primaryScore)
+        }
+        if (left.patternPotential != right.patternPotential) {
+            return right.patternPotential.compareTo(left.patternPotential)
         }
         if (left.goal.secondaryScore != right.goal.secondaryScore) {
             return right.goal.secondaryScore.compareTo(left.goal.secondaryScore)
@@ -277,6 +296,47 @@ class BoardSolver {
         return left.state.path.size.compareTo(right.state.path.size)
     }
 
+    /**
+     * A combo threshold can be reached before a required pattern is assembled.
+     * Keep a small frontier below the threshold so routes that temporarily trade
+     * combo count for pattern progress are not all pruned at once.
+     */
+    private fun selectBeam(
+        candidates: Collection<RankedState>,
+        beamWidth: Int,
+        goal: SolveGoal,
+    ): List<RankedState> {
+        val ranked = candidates.sortedWith(::compareRanked)
+        if (goal.targetComboCount == null || goal.matchPatternFocus == null || ranked.size <= beamWidth) {
+            return ranked.take(beamWidth)
+        }
+
+        val belowTarget = ranked.filterNot { it.goal.primaryCriterionSatisfied }
+        if (belowTarget.isEmpty()) return ranked.take(beamWidth)
+
+        val reserve = minOf(beamWidth / BELOW_TARGET_BEAM_DIVISOR, belowTarget.size)
+        val selected = ArrayList<RankedState>(beamWidth)
+        selected += ranked.asSequence()
+            .filter { it.goal.primaryCriterionSatisfied }
+            .take(beamWidth - reserve)
+        val selectedStates = selected.toHashSet()
+        val patternFrontier = belowTarget.sortedWith { left, right ->
+            val potentialOrder = right.patternPotential.compareTo(left.patternPotential)
+            if (potentialOrder != 0) potentialOrder else compareRanked(left, right)
+        }
+        for (candidate in patternFrontier) {
+            if (selected.size >= beamWidth) break
+            if (selectedStates.add(candidate)) selected += candidate
+        }
+        if (selected.size < beamWidth) {
+            for (candidate in ranked) {
+                if (selected.size >= beamWidth) break
+                if (selectedStates.add(candidate)) selected += candidate
+            }
+        }
+        return selected
+    }
+
     private fun isBetter(candidate: RankedState, best: RankedState): Boolean {
         if (candidate.goal.satisfied != best.goal.satisfied) return candidate.goal.satisfied
         if (candidate.goal.primaryCriterionSatisfied != best.goal.primaryCriterionSatisfied) {
@@ -284,6 +344,9 @@ class BoardSolver {
         }
         if (candidate.goal.primaryScore != best.goal.primaryScore) {
             return candidate.goal.primaryScore > best.goal.primaryScore
+        }
+        if (candidate.patternPotential != best.patternPotential) {
+            return candidate.patternPotential > best.patternPotential
         }
         if (candidate.goal.secondaryScore != best.goal.secondaryScore) {
             return candidate.goal.secondaryScore > best.goal.secondaryScore
@@ -374,6 +437,7 @@ class BoardSolver {
         val state: SearchState,
         val analysis: BoardAnalysis,
         val goal: GoalEvaluation,
+        val patternPotential: Int,
         val nearMatchCount: Int,
     )
 
@@ -381,5 +445,6 @@ class BoardSolver {
         const val COLOR_MASK = 0b111
         const val LOCKED_BIT = 1 shl 3
         const val ENHANCED_BIT = 1 shl 4
+        const val BELOW_TARGET_BEAM_DIVISOR = 4
     }
 }
