@@ -287,6 +287,9 @@ fun SolutionScreen(
         onApply = { onRecalculate(preferredColor, targetComboCount) },
     ) { openSettings ->
         val missedTarget = solution.targetComboCount?.takeIf { !solution.goalSatisfied }
+        val preferredColorComboCount = solution.preferredColor?.let { color ->
+            solution.predictedMatches.allMatches.count { it.color == color }
+        }
         Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
@@ -297,8 +300,14 @@ fun SolutionScreen(
             Text("Criteria not met", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(4.dp))
             Text(
-                "Could not find a route that reaches at least $missedTarget combos. " +
-                    "The best result found was ${solution.comboCount} combos.",
+                buildString {
+                    append("Could not find a route that reaches at least $missedTarget combos. ")
+                    append("The best result found was ${solution.comboCount} combos")
+                    if (solution.preferredColor != null && preferredColorComboCount != null) {
+                        append(", including $preferredColorComboCount ${orbColorName(solution.preferredColor)} combos")
+                    }
+                    append(".")
+                },
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -317,7 +326,12 @@ fun SolutionScreen(
                 1 -> " · 1 cascade"
                 else -> " · $cascadeCount cascades"
             }
-            Text("${solution.comboCount} combos · ${solution.orbMoves} orb moves$cascadeSummary")
+            val focusedColorSummary = if (solution.preferredColor != null && preferredColorComboCount != null) {
+                " · $preferredColorComboCount ${orbColorName(solution.preferredColor)} combos"
+            } else {
+                ""
+            }
+            Text("${solution.comboCount} combos$focusedColorSummary · ${solution.orbMoves} orb moves$cascadeSummary")
             solution.targetComboCount?.let { target ->
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -424,8 +438,8 @@ private fun ComboTargetDropdown(
 ) {
     val choices = listOf(
         null to "No minimum",
-        7 to "At least 7 combos",
-        10 to "At least 10 combos",
+        7 to "7 combos",
+        10 to "10 combos",
     )
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
