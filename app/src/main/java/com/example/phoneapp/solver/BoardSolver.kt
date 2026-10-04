@@ -14,6 +14,8 @@ import kotlin.coroutines.coroutineContext
 
 data class GoalEvaluation(
     val satisfied: Boolean,
+    /** Used to preserve the user's declared priority when multiple hard criteria are unmet. */
+    val primaryCriterionSatisfied: Boolean = satisfied,
     val primaryScore: Int,
     val secondaryScore: Int = 0,
 )
@@ -26,6 +28,7 @@ fun interface SolveGoal {
     fun evaluate(analysis: BoardAnalysis): GoalEvaluation
 
     val preferredColor: OrbColor? get() = null
+    val matchPatternFocus: MatchPattern? get() = null
     val targetComboCount: Int? get() = null
 }
 
@@ -54,10 +57,32 @@ data class MaximizeColorDamage(val color: OrbColor) : SolveGoal {
     }
 }
 
+/** Prefer routes that activate the selected match formation. */
+data class MaximizeMatchPattern(
+    val pattern: MatchPattern,
+    val color: OrbColor? = null,
+) : SolveGoal {
+    override val preferredColor: OrbColor? get() = color
+    override val matchPatternFocus: MatchPattern get() = pattern
+
+    override fun evaluate(analysis: BoardAnalysis): GoalEvaluation {
+        val patternCount = pattern.countMatches(analysis, color)
+        val patternSatisfied = patternCount > 0
+        return GoalEvaluation(
+            satisfied = patternSatisfied,
+            primaryCriterionSatisfied = patternSatisfied,
+            primaryScore = patternCount,
+            secondaryScore = color?.let { ColorDamageEstimate.scoreRelativeDamage(analysis, it) }
+                ?: analysis.comboCount,
+        )
+    }
+}
+
 /** First reach a combo threshold, then rank those routes by the chosen color objective. */
 data class TargetComboCount(
     val target: Int,
     val color: OrbColor? = null,
+    val pattern: MatchPattern? = null,
 ) : SolveGoal {
     init {
         require(target > 0)
@@ -67,19 +92,30 @@ data class TargetComboCount(
     }
 
     override val preferredColor: OrbColor? get() = color
+    override val matchPatternFocus: MatchPattern? get() = pattern
     override val targetComboCount: Int get() = target
 
     override fun evaluate(analysis: BoardAnalysis): GoalEvaluation {
         val reachedTarget = analysis.comboCount >= target
-        val objectiveScore = if (reachedTarget && color != null) {
-            ColorDamageEstimate.scoreRelativeDamage(analysis, color)
-        } else {
-            analysis.comboCount
+        val colorScore = color?.let { ColorDamageEstimate.scoreRelativeDamage(analysis, it) }
+        val patternCount = pattern?.countMatches(analysis, color) ?: 0
+        val patternSatisfied = pattern == null || patternCount > 0
+        val objectiveScore = when {
+            !reachedTarget -> analysis.comboCount
+            pattern != null -> patternCount
+            colorScore != null -> colorScore
+            else -> analysis.comboCount
+        }
+        val secondaryScore = when {
+            !reachedTarget -> analysis.comboCount
+            pattern != null && colorScore != null -> colorScore
+            else -> analysis.comboCount
         }
         return GoalEvaluation(
-            satisfied = reachedTarget,
+            satisfied = reachedTarget && patternSatisfied,
+            primaryCriterionSatisfied = reachedTarget,
             primaryScore = objectiveScore,
-            secondaryScore = analysis.comboCount,
+            secondaryScore = secondaryScore,
         )
     }
 
@@ -123,7 +159,11 @@ data class BoardSolution(
     val predictedMatches: BoardAnalysis,
     val goalSatisfied: Boolean,
     val preferredColor: OrbColor? = null,
+    val matchPatternFocus: MatchPattern? = null,
+    val focusedPatternMatchCount: Int? = null,
     val targetComboCount: Int? = null,
+    val comboMinimumSatisfied: Boolean? = null,
+    val matchPatternSatisfied: Boolean? = null,
 ) {
     val comboCount: Int get() = predictedMatches.comboCount
     val orbMoves: Int get() = (path.size - 1).coerceAtLeast(0)
@@ -199,7 +239,16 @@ class BoardSolver {
             predictedMatches = best.analysis,
             goalSatisfied = best.goal.satisfied,
             preferredColor = options.goal.preferredColor,
+            matchPatternFocus = options.goal.matchPatternFocus,
+            focusedPatternMatchCount = options.goal.matchPatternFocus?.countMatches(
+                best.analysis,
+                options.goal.preferredColor,
+            ),
             targetComboCount = options.goal.targetComboCount,
+            comboMinimumSatisfied = options.goal.targetComboCount?.let { best.analysis.comboCount >= it },
+            matchPatternSatisfied = options.goal.matchPatternFocus?.let {
+                it.countMatches(best.analysis, options.goal.preferredColor) > 0
+            },
         )
     }
 
@@ -210,6 +259,9 @@ class BoardSolver {
 
     private fun compareRanked(left: RankedState, right: RankedState): Int {
         if (left.goal.satisfied != right.goal.satisfied) return right.goal.satisfied.compareTo(left.goal.satisfied)
+        if (left.goal.primaryCriterionSatisfied != right.goal.primaryCriterionSatisfied) {
+            return right.goal.primaryCriterionSatisfied.compareTo(left.goal.primaryCriterionSatisfied)
+        }
         if (left.goal.primaryScore != right.goal.primaryScore) {
             return right.goal.primaryScore.compareTo(left.goal.primaryScore)
         }
@@ -227,6 +279,9 @@ class BoardSolver {
 
     private fun isBetter(candidate: RankedState, best: RankedState): Boolean {
         if (candidate.goal.satisfied != best.goal.satisfied) return candidate.goal.satisfied
+        if (candidate.goal.primaryCriterionSatisfied != best.goal.primaryCriterionSatisfied) {
+            return candidate.goal.primaryCriterionSatisfied
+        }
         if (candidate.goal.primaryScore != best.goal.primaryScore) {
             return candidate.goal.primaryScore > best.goal.primaryScore
         }

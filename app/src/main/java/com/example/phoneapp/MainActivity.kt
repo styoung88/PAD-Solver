@@ -37,6 +37,8 @@ import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.BoardSolver
 import com.example.phoneapp.solver.MaximizeColorDamage
 import com.example.phoneapp.solver.MaximizeCombos
+import com.example.phoneapp.solver.MaximizeMatchPattern
+import com.example.phoneapp.solver.MatchPattern
 import com.example.phoneapp.solver.SolveOptions
 import com.example.phoneapp.solver.TargetComboCount
 import com.example.phoneapp.ui.BoardPreviewScreen
@@ -51,6 +53,7 @@ class MainActivity : ComponentActivity() {
     private var solution by mutableStateOf<BoardSolution?>(null)
     private var preferredColor by mutableStateOf<OrbColor?>(null)
     private var targetComboCount by mutableStateOf<Int?>(null)
+    private var matchPatternFocus by mutableStateOf<MatchPattern?>(null)
     private var isReadingCapture by mutableStateOf(false)
     private var isSolving by mutableStateOf(false)
     private var pendingRoutePermission = false
@@ -101,6 +104,9 @@ class MainActivity : ComponentActivity() {
         targetComboCount = getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE)
             .getInt(TARGET_COMBO_COUNT_KEY, 0)
             .takeIf { it > 0 }
+        matchPatternFocus = getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE)
+            .getString(MATCH_PATTERN_KEY, null)
+            ?.let { value -> runCatching { MatchPattern.valueOf(value) }.getOrNull() }
         intent.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(::loadCapture)
         setContent {
             MaterialTheme {
@@ -114,9 +120,11 @@ class MainActivity : ComponentActivity() {
                                 solution = solution!!,
                                 preferredColor = preferredColor,
                                 targetComboCount = targetComboCount,
+                                matchPatternFocus = matchPatternFocus,
                                 isSolving = isSolving,
                                 onPreferredColorChanged = ::updatePreferredColor,
                                 onTargetComboCountChanged = ::updateTargetComboCount,
+                                onMatchPatternFocusChanged = ::updateMatchPatternFocus,
                                 onRecalculate = ::solveBoard,
                                 onShowInGame = { showSolutionInPad(solution!!) },
                                 onNewBoard = { resetToHome() },
@@ -127,8 +135,10 @@ class MainActivity : ComponentActivity() {
                             isSolving = isSolving,
                             preferredColor = preferredColor,
                             targetComboCount = targetComboCount,
+                            matchPatternFocus = matchPatternFocus,
                             onPreferredColorChanged = ::updatePreferredColor,
                             onTargetComboCountChanged = ::updateTargetComboCount,
+                            onMatchPatternFocusChanged = ::updateMatchPatternFocus,
                             onSolve = ::solveBoard,
                             onNewBoard = ::resetToHome,
                         )
@@ -214,19 +224,21 @@ class MainActivity : ComponentActivity() {
     private fun solveBoard(
         color: OrbColor? = preferredColor,
         targetComboCount: Int? = this.targetComboCount,
+        pattern: MatchPattern? = this.matchPatternFocus,
     ) {
         val board = (recognition as? BoardRecognition.Recognized)?.board ?: return
         isSolving = true
         lifecycleScope.launch {
             val goal = when {
-                targetComboCount != null -> TargetComboCount(targetComboCount, color)
+                targetComboCount != null -> TargetComboCount(targetComboCount, color, pattern)
+                pattern != null -> MaximizeMatchPattern(pattern, color)
                 color != null -> MaximizeColorDamage(color)
                 else -> MaximizeCombos
             }
             runCatching { BoardSolver().solve(board, SolveOptions(goal = goal)) }
                 .onSuccess { result ->
                     solution = result
-                    if (result.targetComboCount != null && !result.goalSatisfied) {
+                    if (!result.goalSatisfied) {
                         stopService(Intent(this@MainActivity, SolutionOverlayService::class.java)
                             .setAction(SolutionOverlayService.ACTION_HIDE))
                     }
@@ -249,6 +261,13 @@ class MainActivity : ComponentActivity() {
         targetComboCount = target
         getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE).edit().apply {
             if (target == null) remove(TARGET_COMBO_COUNT_KEY) else putInt(TARGET_COMBO_COUNT_KEY, target)
+        }.apply()
+    }
+
+    private fun updateMatchPatternFocus(pattern: MatchPattern?) {
+        matchPatternFocus = pattern
+        getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE).edit().apply {
+            if (pattern == null) remove(MATCH_PATTERN_KEY) else putString(MATCH_PATTERN_KEY, pattern.name)
         }.apply()
     }
 
@@ -305,6 +324,7 @@ class MainActivity : ComponentActivity() {
         const val SOLVER_PREFERENCES = "solver_preferences"
         const val PREFERRED_COLOR_KEY = "preferred_orb_color"
         const val TARGET_COMBO_COUNT_KEY = "target_combo_count"
+        const val MATCH_PATTERN_KEY = "match_pattern"
     }
 }
 

@@ -62,6 +62,7 @@ import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.solver.BoardSolution
+import com.example.phoneapp.solver.MatchPattern
 
 @Composable
 fun HomeScreen(onCapture: () -> Unit, onChooseScreenshot: () -> Unit) {
@@ -95,9 +96,11 @@ fun BoardPreviewScreen(
     isSolving: Boolean,
     preferredColor: OrbColor?,
     targetComboCount: Int?,
+    matchPatternFocus: MatchPattern?,
     onPreferredColorChanged: (OrbColor?) -> Unit,
     onTargetComboCountChanged: (Int?) -> Unit,
-    onSolve: (OrbColor?, Int?) -> Unit,
+    onMatchPatternFocusChanged: (MatchPattern?) -> Unit,
+    onSolve: (OrbColor?, Int?, MatchPattern?) -> Unit,
     onNewBoard: () -> Unit,
 ) {
     when (recognition) {
@@ -116,11 +119,13 @@ fun BoardPreviewScreen(
         is BoardRecognition.Recognized -> SolveSettingsDrawer(
             preferredColor = preferredColor,
             targetComboCount = targetComboCount,
+            matchPatternFocus = matchPatternFocus,
             isSolving = isSolving,
             onPreferredColorChanged = onPreferredColorChanged,
             onTargetComboCountChanged = onTargetComboCountChanged,
+            onMatchPatternFocusChanged = onMatchPatternFocusChanged,
             actionLabel = if (isSolving) "Solving…" else "Apply and solve",
-            onApply = { onSolve(preferredColor, targetComboCount) },
+            onApply = { onSolve(preferredColor, targetComboCount, matchPatternFocus) },
         ) { openSettings ->
             Column(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
@@ -151,9 +156,11 @@ fun BoardPreviewScreen(
 private fun SolveSettingsDrawer(
     preferredColor: OrbColor?,
     targetComboCount: Int?,
+    matchPatternFocus: MatchPattern?,
     isSolving: Boolean,
     onPreferredColorChanged: (OrbColor?) -> Unit,
     onTargetComboCountChanged: (Int?) -> Unit,
+    onMatchPatternFocusChanged: (MatchPattern?) -> Unit,
     actionLabel: String,
     onApply: () -> Unit,
     content: @Composable (openSettings: () -> Unit) -> Unit,
@@ -186,6 +193,14 @@ private fun SolveSettingsDrawer(
                                 onTargetSelected = onTargetComboCountChanged,
                             )
                             Spacer(Modifier.height(16.dp))
+                            Text("Required match pattern", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(8.dp))
+                            MatchPatternDropdown(
+                                selectedPattern = matchPatternFocus,
+                                enabled = !isSolving,
+                                onPatternSelected = onMatchPatternFocusChanged,
+                            )
+                            Spacer(Modifier.height(16.dp))
                             Text("Color focus", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             OrbColorDropdown(
@@ -195,7 +210,7 @@ private fun SolveSettingsDrawer(
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "A combo target is prioritized first. After it is reached, color damage guides route selection. " +
+                                "Selected combo and pattern requirements must both be met. Color damage ranks routes that meet them. " +
                                     "The estimate includes match size, combos, and + orbs; team and enemy modifiers are excluded.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -260,23 +275,34 @@ fun SolutionScreen(
     solution: BoardSolution,
     preferredColor: OrbColor?,
     targetComboCount: Int?,
+    matchPatternFocus: MatchPattern?,
     isSolving: Boolean,
     onPreferredColorChanged: (OrbColor?) -> Unit,
     onTargetComboCountChanged: (Int?) -> Unit,
-    onRecalculate: (OrbColor?, Int?) -> Unit,
+    onMatchPatternFocusChanged: (MatchPattern?) -> Unit,
+    onRecalculate: (OrbColor?, Int?, MatchPattern?) -> Unit,
     onShowInGame: () -> Unit,
     onNewBoard: () -> Unit,
 ) {
     SolveSettingsDrawer(
         preferredColor = preferredColor,
         targetComboCount = targetComboCount,
+        matchPatternFocus = matchPatternFocus,
         isSolving = isSolving,
         onPreferredColorChanged = onPreferredColorChanged,
         onTargetComboCountChanged = onTargetComboCountChanged,
+        onMatchPatternFocusChanged = onMatchPatternFocusChanged,
         actionLabel = if (isSolving) "Recalculating route…" else "Apply and recalculate",
-        onApply = { onRecalculate(preferredColor, targetComboCount) },
+        onApply = { onRecalculate(preferredColor, targetComboCount, matchPatternFocus) },
     ) { openSettings ->
-        val missedTarget = solution.targetComboCount?.takeIf { !solution.goalSatisfied }
+        val unmetRequirements = buildList {
+            if (solution.targetComboCount != null && solution.comboMinimumSatisfied != true) {
+                add("at least ${solution.targetComboCount} combos")
+            }
+            if (solution.matchPatternFocus != null && solution.matchPatternSatisfied != true) {
+                add("a ${solution.preferredColor?.let { "${orbColorName(it)} " }.orEmpty()}${solution.matchPatternFocus.displayName} match")
+            }
+        }
         val preferredColorComboCount = solution.preferredColor?.let { color ->
             solution.predictedMatches.allMatches.count { it.color == color }
         }
@@ -286,13 +312,13 @@ fun SolutionScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        if (missedTarget != null) {
+        if (unmetRequirements.isNotEmpty()) {
             Text("Criteria not met", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(4.dp))
             Text(
                 buildString {
-                    append("Could not find a route that reaches at least $missedTarget combos. ")
-                    append("The best result found was ${solution.comboCount} combos")
+                    append("Could not find a route that meets ${unmetRequirements.joinToString(" and ")}. ")
+                    append("Best attempt: ${solution.comboCount} combos")
                     if (solution.preferredColor != null && preferredColorComboCount != null) {
                         append(", including $preferredColorComboCount ${orbColorName(solution.preferredColor)} combos")
                     }
@@ -321,11 +347,14 @@ fun SolutionScreen(
             } else {
                 ""
             }
-            Text("${solution.comboCount} combos$focusedColorSummary · ${solution.orbMoves} orb moves$cascadeSummary")
+            val focusedPatternSummary = solution.matchPatternFocus?.let { pattern ->
+                " · ${solution.focusedPatternMatchCount ?: 0} ${solution.preferredColor?.let { "${orbColorName(it)} " }.orEmpty()}${pattern.displayName} matches"
+            }.orEmpty()
+            Text("${solution.comboCount} combos$focusedColorSummary$focusedPatternSummary · ${solution.orbMoves} orb moves$cascadeSummary")
             solution.targetComboCount?.let { target ->
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Target: $target combos reached",
+                "Minimum: $target combos reached",
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -427,6 +456,7 @@ private fun ComboTargetDropdown(
 ) {
     val choices = listOf(
         null to "No minimum",
+        5 to "5 combos",
         7 to "7 combos",
         10 to "10 combos",
     )
@@ -454,6 +484,46 @@ private fun ComboTargetDropdown(
                     text = { Text(label) },
                     onClick = {
                         onTargetSelected(target)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun MatchPatternDropdown(
+    selectedPattern: MatchPattern?,
+    enabled: Boolean,
+    onPatternSelected: (MatchPattern?) -> Unit,
+) {
+    val choices = listOf(null to "No pattern requirement") + MatchPattern.entries.map { it to it.displayName }
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = choices.first { it.first == selectedPattern }.second,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Match pattern") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor(
+                type = androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable,
+                enabled = enabled,
+            ).fillMaxWidth(),
+            enabled = enabled,
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            choices.forEach { (pattern, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        onPatternSelected(pattern)
                         expanded = false
                     },
                 )
