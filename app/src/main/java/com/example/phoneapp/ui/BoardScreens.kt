@@ -28,7 +28,6 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -221,14 +220,6 @@ private fun SolveSettingsDrawer(
                         onClick = { scope.launch { drawerState.close() } },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Close") }
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider()
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "More solve preferences can be added here later.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         },
@@ -375,8 +366,7 @@ private fun SettingsDrawerTrigger(onClick: () -> Unit, enabled: Boolean) {
                     )
                 }
             }
-            Text("Solve settings")
-            Text("›")
+            Text("Open settings")
         }
     }
 }
