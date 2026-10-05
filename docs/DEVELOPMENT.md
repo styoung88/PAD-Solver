@@ -37,3 +37,11 @@ On this Windows setup, Gradle has occasionally logged an `AccessDeniedException`
 ## Local artifacts
 
 Keep generated previews, exported device-build archives, Gradle caches, and build outputs out of the repository. Committed screenshot fixtures used by tests belong only under `app/src/androidTest/assets`.
+
+## Automatic PAD overlay capture
+
+Use Open PAD overlay from the home screen, or Show route in PAD from a solution, to enable the overlay session. Allow screen sharing and full photo access when prompted. Screen-sharing consent is required once per session; Android requires a foreground notification, which has only a Stop sharing action. While the overlay is enabled, its Capture button and newly saved screenshots whose filenames contain `screenshot` trigger a fresh screen capture, board recognition, and solving with the saved color, combo target, and match pattern. The previous route clears first; an uncertain board or unmet solve goal shows a retry status instead of a route.
+
+The app temporarily hides its overlay windows and attaches a fresh image reader to the projection surface after 350 ms to obtain a clean frame, including when PAD is static. The previous reader is closed to discard queued frames; image timestamps are not compared with system clocks because their time bases can differ. A phone screenshot acts as a trigger: the gallery image can contain the overlay, while the solver uses the subsequent clean frame. Keep PAD on the same board until capture completes. Full photo access is needed to observe screenshots from other apps; the overlay Capture button works without it. Closing the overlay or Stop sharing ends screen sharing and closes the overlay.
+
+When the overlay cannot satisfy the saved solve goal, tap Adjust settings to return to the app with that capture loaded. The overlay controls close during review while the sharing session remains active. Change the solve settings, apply and solve, then show the revised route in PAD. Loading a new capture cancels any previous board read or solve to keep old results from replacing it.
