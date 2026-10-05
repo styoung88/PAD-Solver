@@ -18,8 +18,8 @@ object RouteArrowRenderer {
         0xFFEC407A.toInt(),
     )
     private const val OUTLINE_COLOR = 0xE817202B.toInt()
-    private const val START_COLOR = 0xFF102A3A.toInt()
-    private const val FINISH_COLOR = 0xFFFFD34D.toInt()
+    private const val START_BADGE_COLOR = 0xFF4CAF50.toInt()
+    private const val END_BADGE_COLOR = 0xFFEF4444.toInt()
     private const val GRADIENT_SPEED_MULTIPLIER = 1.5f
     private const val CURVE_TIGHTNESS = 0.14f
 
@@ -62,6 +62,15 @@ object RouteArrowRenderer {
             }
             ?: separateOverlappingRuns(routePoints, cellSize, bounds.centerX())
 
+        val sameStartAndFinish = path.first() == path.last()
+        val start = endpointCenters?.first ?: routePoints.first().let { point ->
+            if (sameStartAndFinish) point.first to point.second - cellSize * 0.19f else point
+        }
+        val finish = endpointCenters?.second ?: routePoints.last().let { point ->
+            if (sameStartAndFinish) point.first to point.second + cellSize * 0.19f else point
+        }
+        val startRadius = cellSize * 0.23f
+        val finishRadius = cellSize * 0.23f
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = OUTLINE_COLOR
             style = Paint.Style.STROKE
@@ -105,7 +114,7 @@ object RouteArrowRenderer {
             segmentCount <= 20 -> 3
             else -> ROUTE_GRADIENT.size
         }
-        for (index in 0 until segmentCount) {
+        fun drawSegment(index: Int, restoreOutline: Boolean = false) {
             val from = routeAnchors[index]
             val to = routeAnchors[index + 1]
             val (control1, control2) = curveControls(routeAnchors, index)
@@ -116,6 +125,7 @@ object RouteArrowRenderer {
                 moveTo(from.first, from.second)
                 cubicTo(control1.first, control1.second, control2.first, control2.second, to.first, to.second)
             }
+            if (restoreOutline) canvas.drawPath(segmentPath, outlinePaint)
             canvas.drawPath(segmentPath, routePaint)
 
             val arrowProgress = 0.72f
@@ -138,35 +148,26 @@ object RouteArrowRenderer {
             canvas.drawPath(arrow, arrowOutline)
             canvas.drawPath(arrow, arrowFill)
         }
+        for (index in 0 until segmentCount) drawSegment(index)
 
-        val sameStartAndFinish = path.first() == path.last()
-        val start = endpointCenters?.first ?: routePoints.first().let { point ->
-            if (sameStartAndFinish) point.first to point.second - cellSize * 0.19f else point
-        }
-        val startRadius = cellSize * 0.23f
+        // The endpoint legs stop visually at the badge rims. Later passes
+        // are replayed through the badge areas so revisits remain traceable.
         canvas.drawCircle(start.first, start.second, startRadius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = OUTLINE_COLOR })
-        canvas.drawCircle(start.first, start.second, startRadius * 0.78f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = FINISH_COLOR })
-        val startTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = START_COLOR
-            textAlign = Paint.Align.CENTER
-            textSize = cellSize * 0.23f
-            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-        }
-        canvas.drawText("S", start.first, start.second - (startTextPaint.ascent() + startTextPaint.descent()) / 2f, startTextPaint)
-
-        val finish = endpointCenters?.second ?: routePoints.last().let { point ->
-            if (sameStartAndFinish) point.first to point.second + cellSize * 0.19f else point
-        }
-        val finishRadius = cellSize * 0.23f
+        canvas.drawCircle(start.first, start.second, startRadius * 0.78f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = START_BADGE_COLOR })
         canvas.drawCircle(finish.first, finish.second, finishRadius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = OUTLINE_COLOR })
-        canvas.drawCircle(finish.first, finish.second, finishRadius * 0.78f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = START_COLOR })
-        val finishTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            textAlign = Paint.Align.CENTER
-            textSize = cellSize * 0.23f
-            typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD)
+        canvas.drawCircle(finish.first, finish.second, finishRadius * 0.78f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = END_BADGE_COLOR })
+
+        if (segmentCount > 2) {
+            val badgeAreas = Path().apply {
+                addCircle(start.first, start.second, startRadius, Path.Direction.CW)
+                addCircle(finish.first, finish.second, finishRadius, Path.Direction.CW)
+            }
+            canvas.save()
+            canvas.clipPath(badgeAreas)
+            for (index in 1 until (segmentCount - 1)) drawSegment(index, restoreOutline = true)
+            canvas.restore()
         }
-        canvas.drawText("E", finish.first, finish.second - (finishTextPaint.ascent() + finishTextPaint.descent()) / 2f, finishTextPaint)
+
     }
 
     private fun curveControls(points: List<Pair<Float, Float>>, index: Int): Pair<Pair<Float, Float>, Pair<Float, Float>> {
