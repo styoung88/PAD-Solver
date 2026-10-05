@@ -17,6 +17,24 @@ A request to merge a feature branch also authorizes cleaning it up. Commit and p
 - Build the installable app with `./gradlew :app:assembleDebug` (Windows: `.\gradlew.bat :app:assembleDebug`). Run JVM tests with `./gradlew :app:testDebugUnitTest`; run device/emulator instrumentation tests with `./gradlew :app:connectedDebugAndroidTest`.
 - After device instrumentation tests, run `scripts/install-debug-to-device.ps1` again and verify the app is installed. Test-runner cleanup can remove the app from the phone.
 
+## Pull requests and automatic checks
+
+Open a pull request from the feature branch into `main`. Related cleanup and its regression tests can share a branch and PR. Use the PR template to describe the final behavior, validation, and any remaining limitations. Merge only after reviewing the diff and check results.
+
+`.github/workflows/android.yml` runs on pull requests into `main`, pushes to `main`, and manual workflow dispatches. It runs JVM tests, Android lint, and debug app/test APK builds, then the complete instrumentation suite on API 26 and API 36 emulators. API 26 protects the minimum supported Android version; API 36 adds a recent runtime. Continue checking the physical phone for its current Android version, real screen capture, permissions, and overlay behavior.
+
+CI uses the committed Gradle wrapper and fixed action revisions with read-only repository permissions. New pushes cancel outdated checks on the same PR. Test and lint reports are retained as downloadable workflow artifacts for 14 days, including failed runs. The jobs run their test tasks directly; tests are never skipped to produce a passing check.
+
+After the first successful workflow run, repository branch protection can require `Unit tests, lint and build`, `Device tests (API 26)`, and `Device tests (API 36)` before merging. Adding a workflow alone does not configure branch protection.
+
+## Regression coverage
+
+Keep pure board and solver tests in `app/src/test` so they run without Android. These cover matched group boundaries, simultaneous clears, gravity and cascades, enhanced-orb accounting, pattern geometry/color filters, goal evaluation, search bounds, route replay, and cancellation. The screenshot-derived combo/pattern regression also runs locally. Check route legality and resulting matches rather than requiring a particular path when multiple routes are valid; the bounded search does not guarantee a global optimum.
+
+Capture-request tests drive readiness, timeout, retry, stale callbacks, concurrent frame consumption, and session cancellation without clocks or actual screen sharing. Device tests exercise reader replacement, service shutdown, screenshot recognition/rejection, renderer alignment, settings persistence, recalculation, activity recreation, busy/uncertain/unmet-goal screens, and replacement of an active solve by a new capture. UI tests keep the display awake and restore solve preferences after each test; unlock physical devices before running them.
+
+Android's real projection consent/revocation and hardware acquisition still need a manual smoke check on the phone: deny permissions and retry; start sharing; capture a static board twice; stop sharing while capture/solve is pending; verify both overlays disappear; then start a new session. Verify no old route appears after a failed capture. The request-state tests cover timeout coordination, while the actual 350 ms surface switch and 5 second timeout remain Android integration checks. File decode failures are automated; disk-full/write failures require a controlled device test. Add a regression test with independently checked expected results whenever fixing a new bug. Keep performance benchmarks separate from correctness checks.
+
 ## Install a debug build on a connected Android device (Windows)
 
 Always build and install updated debug builds on the user's connected phone after changes that affect the app. Routine device updates are authorized without another confirmation. Report installation success, or explain if the phone is disconnected or unauthorized. If multiple physical devices are connected, ask which phone to use.

@@ -7,6 +7,7 @@ import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -20,7 +21,9 @@ class FreshCaptureReaderTest {
             image.timestamp = 123L
             oldWriter.queueInputImage(image)
         }
+        val previousSurface = previous.surface
         val fresh = ScreenCaptureService.replaceCaptureReader(previous)
+        assertFalse("Replacement must release the old reader's surface", previousSurface.isValid)
         oldWriter.close()
         val writer = ImageWriter.newInstance(fresh.surface, 2)
         try {

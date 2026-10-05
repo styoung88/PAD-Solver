@@ -17,7 +17,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.MainActivity
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
+import com.example.phoneapp.solver.SolveSettings
+import com.example.phoneapp.solver.SolveSettingsStore
 import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,9 +32,17 @@ class SolveSettingsDrawerTest {
     val compose = createAndroidComposeRule<MainActivity>()
 
     private var captureFile: File? = null
+    private lateinit var previousSettings: SolveSettings
+
+    @Before
+    fun rememberSettings() {
+        previousSettings = SolveSettingsStore(compose.activity).load()
+        compose.runOnUiThread { compose.activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    }
 
     @After
     fun cleanUp() {
+        SolveSettingsStore(compose.activity).save(previousSettings)
         captureFile?.delete()
     }
 
@@ -50,8 +61,10 @@ class SolveSettingsDrawerTest {
         compose.onNodeWithContentDescription("Open solve settings").performClick()
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
         compose.onNodeWithText("Wood").assertIsDisplayed()
-        compose.onNodeWithText("Apply and recalculate").assertIsDisplayed()
-        compose.onNodeWithText("Close").performClick()
+        selectChoice("Optimize color damage for", "Fire")
+        compose.onNodeWithText("Apply and recalculate").performClick()
+        waitForText("Fire combos")
+        compose.onNodeWithText("Wood combos").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD").assertIsDisplayed()
     }
 
@@ -65,6 +78,55 @@ class SolveSettingsDrawerTest {
         compose.onNodeWithContentDescription("Open solve settings").performClick()
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
         compose.onNodeWithText("Apply and solve").assertIsDisplayed()
+    }
+
+    @Test
+    fun settingsIncludingNonPresetTargetSurviveActivityRecreation() {
+        SolveSettingsStore(compose.activity).save(SolveSettings(targetComboCount = 6))
+        compose.activityRule.scenario.recreate()
+        loadCapture(openSettings = true)
+        waitForText("Apply and solve")
+        compose.onNodeWithText("6 combos").assertIsDisplayed()
+        selectChoice("Optimize color damage for", "Dark")
+        selectChoice("Match pattern", "Cross")
+        compose.onNodeWithText("Close").performClick()
+        compose.activityRule.scenario.recreate()
+        // The capture intent retains the overlay's request to open settings.
+        waitForText("Apply and solve")
+        compose.onNodeWithText("6 combos").assertIsDisplayed()
+        compose.onNodeWithText("Dark").assertIsDisplayed()
+        compose.onNodeWithText("Cross").assertIsDisplayed()
+    }
+
+    @Test
+    fun corruptCaptureShowsRetryAndNewCaptureReplacesIt() {
+        val file = File(compose.activity.filesDir, "invalid-capture.png")
+        file.writeText("Not an image")
+        try {
+            sendCapture(file, openSettings = false)
+            waitForText("Board not clear enough")
+            compose.onNodeWithContentDescription("Open solve settings").assertDoesNotExist()
+            loadCapture(openSettings = false)
+            waitForText("Board captured")
+            compose.onNodeWithText("Board not clear enough").assertDoesNotExist()
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun aNewCaptureCancelsThePreviousSolveAndCannotDisplayItsRoute() {
+        loadCapture(openSettings = true)
+        waitForText("Apply and solve")
+        selectChoice("Minimum combos", "No minimum")
+        selectChoice("Match pattern", "No pattern requirement")
+        compose.onNodeWithText("Apply and solve").performClick()
+        val missing = File(compose.activity.filesDir, "missing-capture.png")
+        sendCapture(missing, openSettings = false)
+        waitForText("Board not clear enough")
+        compose.waitForIdle()
+        compose.onNodeWithText("Board not clear enough").assertIsDisplayed()
+        compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
     }
 
     private fun selectChoice(label: String, choice: String) {
@@ -86,6 +148,10 @@ class SolveSettingsDrawerTest {
         instrumentation.context.assets.open("pad-board-reference.png").use { input ->
             file.outputStream().use { output -> input.copyTo(output) }
         }
+        sendCapture(file, openSettings)
+    }
+
+    private fun sendCapture(file: File, openSettings: Boolean) {
         compose.runOnUiThread {
             compose.activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             compose.activity.startActivity(Intent(compose.activity.intent).apply {
