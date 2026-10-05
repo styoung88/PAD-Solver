@@ -64,6 +64,7 @@ class SolutionOverlayService : Service() {
             }
         }
         runCatching { windowManager?.addView(view, params) }
+            .onFailure { android.util.Log.e("RouteOverlay", "Could not attach route overlay view", it) }
 
         val close = TextView(this).apply {
             text = "×"
@@ -116,10 +117,16 @@ class SolutionOverlayService : Service() {
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             if (path.isEmpty()) return
-            val scaleX = width.toFloat() / captureWidth
-            val scaleY = height.toFloat() / captureHeight
             val positions = path.map { index ->
                 BoardPosition(index / Board.DEFAULT_COLUMNS, index % Board.DEFAULT_COLUMNS)
+            }
+            val scaleX = width.toFloat() / captureWidth
+            val scaleY = height.toFloat() / captureHeight
+            // Preserve the overlay coordinates from before arrow rendering
+            // (57fff16), calculated in screenshot space before scaling.
+            val points = positions.map { position ->
+                ((boardBounds.left + (position.column + 0.5f) * boardBounds.width() / Board.DEFAULT_COLUMNS) * scaleX) to
+                    ((boardBounds.top + (position.row + 0.5f) * boardBounds.height() / Board.DEFAULT_ROWS) * scaleY)
             }
             RouteArrowRenderer.draw(
                 canvas = canvas,
@@ -133,6 +140,7 @@ class SolutionOverlayService : Service() {
                 columns = Board.DEFAULT_COLUMNS,
                 rows = Board.DEFAULT_ROWS,
                 density = resources.displayMetrics.density,
+                endpointCenters = points.first() to points.last(),
             )
         }
     }

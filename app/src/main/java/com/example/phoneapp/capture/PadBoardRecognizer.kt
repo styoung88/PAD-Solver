@@ -28,43 +28,56 @@ class PadBoardRecognizer {
         val colorMap = ClassifiedImage.from(bitmap, ::classify)
 
         var best: Candidate? = null
-        val minWidth = bitmap.width * MIN_BOARD_WIDTH_FRACTION
-        val maxWidth = bitmap.width * MAX_BOARD_WIDTH_FRACTION
-        val widthStep = bitmap.width * BOARD_WIDTH_STEP
-        var boardWidth = minWidth
-        while (boardWidth <= maxWidth) {
-            val cellSize = boardWidth / Board.DEFAULT_COLUMNS
-            val boardHeight = cellSize * Board.DEFAULT_ROWS
-            val minCenterY = boardHeight / 2f + bitmap.height * MIN_CENTER_Y_MARGIN
-            val maxCenterY = bitmap.height - boardHeight / 2f - bitmap.height * MAX_CENTER_Y_MARGIN
-            val yStep = (bitmap.height * CENTER_Y_STEP).coerceAtLeast(1f)
-            var centerY = minCenterY
-            while (centerY <= maxCenterY) {
-                val left = (bitmap.width - boardWidth) / 2f
-                val top = centerY - boardHeight / 2f
-                val samples = ArrayList<OrbSample>(Board.DEFAULT_COLUMNS * Board.DEFAULT_ROWS)
-                for (row in 0 until Board.DEFAULT_ROWS) {
-                    for (column in 0 until Board.DEFAULT_COLUMNS) {
-                        val x = left + (column + 0.5f) * cellSize
-                        val y = top + (row + 0.5f) * cellSize
-                        samples += sampleOrbColor(colorMap, x, y, cellSize)
-                    }
+        // PAD's 6-column orb grid spans the screenshot width. Searching for a
+        // narrower "best" rectangle compressed the column spacing: the middle
+        // orbs still looked plausible while S and E drifted toward each other.
+        // Anchor horizontal cell centers to the known grid width instead.
+        val boardWidth = bitmap.width.toFloat()
+        val cellSize = boardWidth / Board.DEFAULT_COLUMNS
+        val boardHeight = cellSize * Board.DEFAULT_ROWS
+        val minCenterY = boardHeight / 2f + bitmap.height * MIN_CENTER_Y_MARGIN
+        val maxCenterY = bitmap.height - boardHeight / 2f - bitmap.height * MAX_CENTER_Y_MARGIN
+        val coarseYStep = (bitmap.height * CENTER_Y_STEP).coerceAtLeast(1f)
+
+        fun candidateAt(centerY: Float): Candidate {
+            val left = 0f
+            val top = centerY - boardHeight / 2f
+            val samples = ArrayList<OrbSample>(Board.DEFAULT_COLUMNS * Board.DEFAULT_ROWS)
+            for (row in 0 until Board.DEFAULT_ROWS) {
+                for (column in 0 until Board.DEFAULT_COLUMNS) {
+                    val x = left + (column + 0.5f) * cellSize
+                    val y = top + (row + 0.5f) * cellSize
+                    samples += sampleOrbColor(colorMap, x, y, cellSize)
                 }
-                val colors = samples.map(OrbSample::color)
-                val recognized = colors.count { it != OrbColor.UNKNOWN }
-                val variety = colors.asSequence().filter { it != OrbColor.UNKNOWN }.distinct().count()
-                val averageColorSupport = samples.sumOf { it.colorSupport.toDouble() }.toFloat() / samples.size
-                val centerPenalty = abs(centerY - bitmap.height * PREFERRED_CENTER_Y) / bitmap.height
-                val widthPenalty = abs(boardWidth / bitmap.width - PREFERRED_WIDTH_FRACTION)
-                val score = recognized + variety * VARIETY_BONUS + averageColorSupport * COLOR_SUPPORT_WEIGHT -
-                    centerPenalty * CENTER_PENALTY - widthPenalty * WIDTH_PENALTY
-                val candidate = Candidate(
-                    left, top, boardWidth, boardHeight, colors, recognized, variety, averageColorSupport, score,
-                )
-                if (best == null || candidate.score > best.score) best = candidate
-                centerY += yStep
             }
-            boardWidth += widthStep
+            val colors = samples.map(OrbSample::color)
+            val recognized = colors.count { it != OrbColor.UNKNOWN }
+            val variety = colors.asSequence().filter { it != OrbColor.UNKNOWN }.distinct().count()
+            val averageColorSupport = samples.sumOf { it.colorSupport.toDouble() }.toFloat() / samples.size
+            val centerPenalty = abs(centerY - bitmap.height * PREFERRED_CENTER_Y) / bitmap.height
+            val score = recognized + variety * VARIETY_BONUS + averageColorSupport * COLOR_SUPPORT_WEIGHT -
+                centerPenalty * CENTER_PENALTY
+            return Candidate(left, top, boardWidth, boardHeight, colors, recognized, variety, averageColorSupport, score)
+        }
+
+        // Coarse vertical scan locates the board, followed by a pixel-level
+        // refinement so the row centers do not inherit the old 0.6%-screen
+        // quantization error.
+        var centerY = minCenterY
+        while (centerY <= maxCenterY) {
+            val candidate = candidateAt(centerY)
+            val currentBest = best
+            if (currentBest == null || candidate.score > currentBest.score) best = candidate
+            centerY += coarseYStep
+        }
+        val coarseBest = best ?: return BoardRecognition.Uncertain(0)
+        val coarseCenterY = coarseBest.top + coarseBest.height / 2f
+        var refinedCenterY = (coarseCenterY - coarseYStep).coerceAtLeast(minCenterY)
+        val refineUntil = (coarseCenterY + coarseYStep).coerceAtMost(maxCenterY)
+        while (refinedCenterY <= refineUntil) {
+            val candidate = candidateAt(refinedCenterY)
+            if (candidate.score > checkNotNull(best).score) best = candidate
+            refinedCenterY += 1f
         }
 
         val candidate = best ?: return BoardRecognition.Uncertain(0)
@@ -354,25 +367,23 @@ class PadBoardRecognizer {
     }
 
     private companion object {
-        const val MIN_BOARD_WIDTH_FRACTION = 0.70f
-        const val MAX_BOARD_WIDTH_FRACTION = 0.995f
-        const val BOARD_WIDTH_STEP = 0.025f
         const val MIN_CENTER_Y_MARGIN = 0.05f
         const val MAX_CENTER_Y_MARGIN = 0.015f
         const val CENTER_Y_STEP = 0.006f
-        const val PREFERRED_CENTER_Y = 0.80f
-        const val PREFERRED_WIDTH_FRACTION = 0.94f
+        // Calibrated against the orb centers in the full-resolution PAD
+        // capture fixture; this keeps vertical candidate scoring centered on
+        // the actual orb grid rather than the color-support plateau above it.
+        const val PREFERRED_CENTER_Y = 0.790f
         const val VARIETY_BONUS = 0.45f
         const val COLOR_SUPPORT_WEIGHT = 18f
         const val CENTER_PENALTY = 4f
-        const val WIDTH_PENALTY = 0.3f
         const val FIRE_CORE_HUE_MAX = 24f
         const val FIRE_ORANGE_HUE_MAX = 40f
         const val FIRE_ORANGE_MIN_BRIGHTNESS = 0.54f
         const val LIGHT_HUE_MAX = 75f
         const val RED_WRAP_HUE_MIN = 350f
         const val SAMPLE_PATCH_RADIUS_FRACTION = 0.025f
-        const val SAMPLE_RING_OFFSET_FRACTION = 0.20f
+        const val SAMPLE_RING_OFFSET_FRACTION = 0.30f
         const val SAMPLE_STEP_FRACTION = 0.01f
         const val PATCH_COLOR_VOTE_FRACTION = 0.55f
         val SAMPLE_PATCH_DIRECTIONS = arrayOf(
@@ -395,7 +406,7 @@ class PadBoardRecognizer {
         const val NO_COLOR = -1
         const val ENHANCED_MARKER_MIN_X_OFFSET = 0.12f
         const val ENHANCED_MARKER_MAX_X_OFFSET = 0.38f
-        const val ENHANCED_MARKER_MIN_Y_OFFSET = 0.20f
+        const val ENHANCED_MARKER_MIN_Y_OFFSET = 0.08f
         const val ENHANCED_MARKER_MAX_Y_OFFSET = 0.52f
         const val ENHANCED_MARKER_OFFSET_STEP = 0.04f
         const val ENHANCED_MARKER_SAMPLE_RADIUS = 0.014f

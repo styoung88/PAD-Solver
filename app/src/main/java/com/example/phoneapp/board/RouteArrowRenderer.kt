@@ -7,7 +7,7 @@ import android.graphics.Path
 import android.graphics.RectF
 import kotlin.math.hypot
 
-/** Shared arrow-first route styling for the in-app preview and PAD overlay. */
+/** Shared continuous route styling for the in-app preview and PAD overlay. */
 object RouteArrowRenderer {
     private const val ROUTE_COLOR = 0xFF36E0D0.toInt()
     private val ROUTE_GRADIENT = intArrayOf(
@@ -19,6 +19,8 @@ object RouteArrowRenderer {
     private const val OUTLINE_COLOR = 0xE817202B.toInt()
     private const val START_COLOR = 0xFF102A3A.toInt()
     private const val FINISH_COLOR = 0xFFFFD34D.toInt()
+    private const val GRADIENT_SPEED_MULTIPLIER = 1.5f
+    private const val CURVE_TIGHTNESS = 0.14f
 
     fun draw(
         canvas: Canvas,
@@ -27,6 +29,7 @@ object RouteArrowRenderer {
         columns: Int,
         rows: Int,
         density: Float,
+        endpointCenters: Pair<Pair<Float, Float>, Pair<Float, Float>>? = null,
     ) {
         if (path.isEmpty() || columns <= 0 || rows <= 0) return
         val cellWidth = bounds.width() / columns
@@ -35,6 +38,29 @@ object RouteArrowRenderer {
         val routePoints = path.map { position ->
             (bounds.left + (position.column + 0.5f) * cellWidth) to
                 (bounds.top + (position.row + 0.5f) * cellHeight)
+        }
+        val cellVisitCounts = mutableMapOf<Int, Int>()
+        val cellAnchors = mutableMapOf<Int, MutableList<Pair<Float, Float>>>()
+        val routeAnchors = mutableListOf<Pair<Float, Float>>()
+        val priorSegments = mutableListOf<Pair<Pair<Float, Float>, Pair<Float, Float>>>()
+        path.forEachIndexed { index, position ->
+            val cell = position.row * columns + position.column
+            val visitOrdinal = cellVisitCounts.getOrDefault(cell, 0)
+            cellVisitCounts[cell] = visitOrdinal + 1
+            val center = routePoints[index]
+            val priorAnchors = cellAnchors.getOrPut(cell) { mutableListOf() }
+            val anchor = if (visitOrdinal == 0) {
+                center
+            } else {
+                val previous = routeAnchors.lastOrNull() ?: center
+                val next = routePoints.getOrNull(index + 1) ?: center
+                revisitCandidates(center, cellSize).maxBy { candidate ->
+                    revisitAnchorScore(candidate, center, previous, next, priorAnchors, priorSegments, cellSize)
+                }
+            }
+            routeAnchors += anchor
+            priorAnchors += anchor
+            if (index > 0) priorSegments += routeAnchors[index - 1] to anchor
         }
 
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -51,6 +77,18 @@ object RouteArrowRenderer {
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
+        val continuousRoute = Path().apply {
+            moveTo(routeAnchors.first().first, routeAnchors.first().second)
+            for (index in 0 until routeAnchors.lastIndex) {
+                val (control1, control2) = curveControls(routeAnchors, index)
+                val end = routeAnchors[index + 1]
+                cubicTo(control1.first, control1.second, control2.first, control2.second, end.first, end.second)
+            }
+        }
+        // Draw one rounded outline under all colored moves, so repeated or
+        // overlapping segments can never create gaps in the route itself.
+        canvas.drawPath(continuousRoute, outlinePaint)
+
         val arrowOutline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = OUTLINE_COLOR
             style = Paint.Style.STROKE
@@ -68,50 +106,29 @@ object RouteArrowRenderer {
             segmentCount <= 20 -> 3
             else -> ROUTE_GRADIENT.size
         }
-        val edgeVisits = mutableMapOf<Long, Int>()
         for (index in 0 until segmentCount) {
-            val fromPosition = path[index]
-            val toPosition = path[index + 1]
-            val from = routePoints[index]
-            val to = routePoints[index + 1]
-            val fromCell = fromPosition.row * columns + fromPosition.column
-            val toCell = toPosition.row * columns + toPosition.column
-            val edgeKey = (minOf(fromCell, toCell).toLong() shl 32) or maxOf(fromCell, toCell).toLong()
-            val visit = edgeVisits.getOrDefault(edgeKey, 0)
-            edgeVisits[edgeKey] = visit + 1
-
-            // Keep repeated traversals on small parallel lanes, consistent even
-            // when a later pass traverses the same edge in the reverse direction.
-            val canonicalStart = if (fromCell < toCell) from else to
-            val canonicalEnd = if (fromCell < toCell) to else from
-            val canonicalDx = canonicalEnd.first - canonicalStart.first
-            val canonicalDy = canonicalEnd.second - canonicalStart.second
-            val canonicalLength = hypot(canonicalDx, canonicalDy).coerceAtLeast(1f)
-            val laneNumber = if (visit == 0) 0f else ((visit + 1) / 2).toFloat() *
-                if (visit % 2 == 1) 1f else -1f
-            val lane = laneNumber * cellSize * 0.13f
-            val offsetX = -canonicalDy / canonicalLength * lane
-            val offsetY = canonicalDx / canonicalLength * lane
-            val startX = from.first + offsetX
-            val startY = from.second + offsetY
-            val endX = to.first + offsetX
-            val endY = to.second + offsetY
-
+            val from = routeAnchors[index]
+            val to = routeAnchors[index + 1]
+            val (control1, control2) = curveControls(routeAnchors, index)
             val segmentColor = routeColorForStep(index, segmentCount, gradientStopCount)
             routePaint.color = segmentColor
             arrowFill.color = segmentColor
-            canvas.drawLine(startX, startY, endX, endY, outlinePaint)
-            canvas.drawLine(startX, startY, endX, endY, routePaint)
+            val segmentPath = Path().apply {
+                moveTo(from.first, from.second)
+                cubicTo(control1.first, control1.second, control2.first, control2.second, to.first, to.second)
+            }
+            canvas.drawPath(segmentPath, routePaint)
 
-            val dx = to.first - from.first
-            val dy = to.second - from.second
+            val arrowProgress = 0.72f
+            val arrowPoint = cubicPoint(from, control1, control2, to, arrowProgress)
+            val (dx, dy) = cubicTangent(from, control1, control2, to, arrowProgress)
             val length = hypot(dx, dy).coerceAtLeast(1f)
             val perpendicularX = -dy / length
             val perpendicularY = dx / length
-            val arrowTipX = startX + dx * 0.72f
-            val arrowTipY = startY + dy * 0.72f
-            val arrowBaseX = startX + dx * 0.43f
-            val arrowBaseY = startY + dy * 0.43f
+            val arrowTipX = arrowPoint.first
+            val arrowTipY = arrowPoint.second
+            val arrowBaseX = arrowTipX - dx / length * cellSize * 0.14f
+            val arrowBaseY = arrowTipY - dy / length * cellSize * 0.14f
             val wing = cellSize * 0.075f
             val arrow = Path().apply {
                 moveTo(arrowTipX, arrowTipY)
@@ -124,7 +141,7 @@ object RouteArrowRenderer {
         }
 
         val sameStartAndFinish = path.first() == path.last()
-        val start = routePoints.first().let { point ->
+        val start = endpointCenters?.first ?: routePoints.first().let { point ->
             if (sameStartAndFinish) point.first to point.second - cellSize * 0.19f else point
         }
         val startRadius = cellSize * 0.23f
@@ -138,7 +155,7 @@ object RouteArrowRenderer {
         }
         canvas.drawText("S", start.first, start.second - (startTextPaint.ascent() + startTextPaint.descent()) / 2f, startTextPaint)
 
-        val finish = routePoints.last().let { point ->
+        val finish = endpointCenters?.second ?: routePoints.last().let { point ->
             if (sameStartAndFinish) point.first to point.second + cellSize * 0.19f else point
         }
         val finishRadius = cellSize * 0.23f
@@ -153,12 +170,144 @@ object RouteArrowRenderer {
         canvas.drawText("E", finish.first, finish.second - (finishTextPaint.ascent() + finishTextPaint.descent()) / 2f, finishTextPaint)
     }
 
+    private fun curveControls(points: List<Pair<Float, Float>>, index: Int): Pair<Pair<Float, Float>, Pair<Float, Float>> {
+        val from = points[index]
+        val to = points[index + 1]
+        val before = points.getOrNull(index - 1) ?: from
+        val after = points.getOrNull(index + 2) ?: to
+        val control1 = (from.first + (to.first - before.first) * CURVE_TIGHTNESS) to
+            (from.second + (to.second - before.second) * CURVE_TIGHTNESS)
+        val control2 = (to.first - (after.first - from.first) * CURVE_TIGHTNESS) to
+            (to.second - (after.second - from.second) * CURVE_TIGHTNESS)
+        return control1 to control2
+    }
+
+    private fun revisitCandidates(center: Pair<Float, Float>, cellSize: Float): List<Pair<Float, Float>> = buildList {
+        val diagonal = 0.70710677f
+        val directions = listOf(
+            -1f to 0f, -diagonal to -diagonal, 0f to -1f, diagonal to -diagonal,
+            1f to 0f, diagonal to diagonal, 0f to 1f, -diagonal to diagonal,
+        )
+        for (radius in listOf(0.19f, 0.29f)) {
+            directions.forEach { (x, y) -> add((center.first + x * cellSize * radius) to (center.second + y * cellSize * radius)) }
+        }
+    }
+
+    private fun revisitAnchorScore(
+        candidate: Pair<Float, Float>,
+        center: Pair<Float, Float>,
+        previous: Pair<Float, Float>,
+        next: Pair<Float, Float>,
+        priorAnchors: List<Pair<Float, Float>>,
+        priorSegments: List<Pair<Pair<Float, Float>, Pair<Float, Float>>>,
+        cellSize: Float,
+    ): Float {
+        var score = -hypot(candidate.first - center.first, candidate.second - center.second) / cellSize * 0.12f
+        priorAnchors.forEach { anchor ->
+            val separation = hypot(candidate.first - anchor.first, candidate.second - anchor.second) / cellSize
+            score += separation.coerceAtMost(0.6f) * 1.5f
+        }
+
+        // Favor a lane with breathing room from the already-drawn route. A
+        // strong penalty discourages crossing or retracing earlier segments.
+        priorSegments.dropLast(1).forEach { (start, end) ->
+            val clearance = segmentDistance(previous, candidate, start, end) / cellSize
+            score += clearance.coerceAtMost(0.45f) * 0.5f
+            if (clearance < 0.13f) score -= 10f
+        }
+
+        val inX = candidate.first - previous.first
+        val inY = candidate.second - previous.second
+        val outX = next.first - candidate.first
+        val outY = next.second - candidate.second
+        val inLength = hypot(inX, inY).coerceAtLeast(1f)
+        val outLength = hypot(outX, outY).coerceAtLeast(1f)
+        score += ((inX * outX + inY * outY) / (inLength * outLength)) * 0.18f
+        return score
+    }
+
+    private fun segmentDistance(
+        a: Pair<Float, Float>,
+        b: Pair<Float, Float>,
+        c: Pair<Float, Float>,
+        d: Pair<Float, Float>,
+    ): Float {
+        fun cross(p: Pair<Float, Float>, q: Pair<Float, Float>, r: Pair<Float, Float>) =
+            (q.first - p.first) * (r.second - p.second) - (q.second - p.second) * (r.first - p.first)
+        val abC = cross(a, b, c)
+        val abD = cross(a, b, d)
+        val cdA = cross(c, d, a)
+        val cdB = cross(c, d, b)
+        val boundsOverlap = maxOf(minOf(a.first, b.first), minOf(c.first, d.first)) <=
+            minOf(maxOf(a.first, b.first), maxOf(c.first, d.first)) &&
+            maxOf(minOf(a.second, b.second), minOf(c.second, d.second)) <=
+            minOf(maxOf(a.second, b.second), maxOf(c.second, d.second))
+        if (boundsOverlap && abC * abD <= 0f && cdA * cdB <= 0f) return 0f
+
+        fun pointDistance(point: Pair<Float, Float>, start: Pair<Float, Float>, end: Pair<Float, Float>): Float {
+            val dx = end.first - start.first
+            val dy = end.second - start.second
+            val lengthSquared = dx * dx + dy * dy
+            if (lengthSquared <= 0f) return hypot(point.first - start.first, point.second - start.second)
+            val projection = (((point.first - start.first) * dx + (point.second - start.second) * dy) / lengthSquared)
+                .coerceIn(0f, 1f)
+            return hypot(point.first - (start.first + projection * dx), point.second - (start.second + projection * dy))
+        }
+
+        return minOf(pointDistance(a, c, d), pointDistance(b, c, d), pointDistance(c, a, b), pointDistance(d, a, b))
+    }
+
+    private fun cubicPoint(
+        start: Pair<Float, Float>,
+        control1: Pair<Float, Float>,
+        control2: Pair<Float, Float>,
+        end: Pair<Float, Float>,
+        t: Float,
+    ): Pair<Float, Float> {
+        val inverse = 1f - t
+        val startWeight = inverse * inverse * inverse
+        val control1Weight = 3f * inverse * inverse * t
+        val control2Weight = 3f * inverse * t * t
+        val endWeight = t * t * t
+        return (
+            start.first * startWeight + control1.first * control1Weight +
+                control2.first * control2Weight + end.first * endWeight
+            ) to (
+            start.second * startWeight + control1.second * control1Weight +
+                control2.second * control2Weight + end.second * endWeight
+            )
+    }
+
+    private fun cubicTangent(
+        start: Pair<Float, Float>,
+        control1: Pair<Float, Float>,
+        control2: Pair<Float, Float>,
+        end: Pair<Float, Float>,
+        t: Float,
+    ): Pair<Float, Float> {
+        val inverse = 1f - t
+        val startWeight = 3f * inverse * inverse
+        val control1Weight = 6f * inverse * t
+        val control2Weight = 3f * t * t
+        return (
+            startWeight * (control1.first - start.first) +
+                control1Weight * (control2.first - control1.first) +
+                control2Weight * (end.first - control2.first)
+            ) to (
+            startWeight * (control1.second - start.second) +
+                control1Weight * (control2.second - control1.second) +
+                control2Weight * (end.second - control2.second)
+            )
+    }
+
     private fun routeColorForStep(step: Int, segmentCount: Int, stopCount: Int): Int {
         if (segmentCount <= 1 || stopCount <= 1) return ROUTE_GRADIENT.first()
         val progress = step.toFloat() / (segmentCount - 1)
-        val colorPosition = progress * (stopCount - 1)
+        // Advance through the palette 50% faster, wrapping from its last
+        // active stop back to the first so long routes remain continuous.
+        val colorPosition = (progress * (stopCount - 1) * GRADIENT_SPEED_MULTIPLIER) % stopCount
         val startIndex = colorPosition.toInt().coerceIn(0, stopCount - 1)
-        val endIndex = (startIndex + 1).coerceAtMost(stopCount - 1)
+        val endIndex = (startIndex + 1) % stopCount
         val fraction = colorPosition - startIndex
         val startColor = ROUTE_GRADIENT[startIndex]
         val endColor = ROUTE_GRADIENT[endIndex]
