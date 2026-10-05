@@ -17,6 +17,7 @@ local.properties
 *.jks
 *.keystore
 keystore.properties
+.android-user-home/
 
 # OS/editor noise
 .DS_Store

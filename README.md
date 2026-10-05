@@ -31,9 +31,12 @@ app/                  Android application module
   src/main/java/      Kotlin source
   src/main/res/       Android resources
   src/main/AndroidManifest.xml
+  src/androidTest/    Instrumentation tests and test-only screenshot fixtures
 docs/                 Project notes and decisions
 .vscode/              Optional editor recommendations
 ```
+
+See [Development workflow](docs/DEVELOPMENT.md) for build, test, and device-install instructions.
 
 ## Before publishing
 
