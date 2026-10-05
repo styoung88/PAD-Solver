@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import kotlin.math.abs
 import kotlin.math.hypot
 
 /** Shared continuous route styling for the in-app preview and PAD overlay. */
@@ -28,7 +29,7 @@ object RouteArrowRenderer {
     fun prepareRoute(path: List<BoardPosition>, columns: Int, rows: Int): PreparedRoute {
         require(columns > 0 && rows > 0)
         val centerline = path.map { position -> (position.column + 0.5f) to (position.row + 0.5f) }
-        return PreparedRoute(separateOverlappingRuns(centerline, 1f))
+        return PreparedRoute(separateOverlappingRuns(centerline, 1f, columns / 2f))
     }
 
     fun draw(
@@ -59,7 +60,7 @@ object RouteArrowRenderer {
             ?.map { (column, row) ->
                 (bounds.left + column * cellWidth) to (bounds.top + row * cellHeight)
             }
-            ?: separateOverlappingRuns(routePoints, cellSize)
+            ?: separateOverlappingRuns(routePoints, cellSize, bounds.centerX())
 
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = OUTLINE_COLOR
@@ -190,13 +191,14 @@ object RouteArrowRenderer {
     private fun separateOverlappingRuns(
         centerline: List<Pair<Float, Float>>,
         cellSize: Float,
+        boardCenterX: Float,
     ): List<Pair<Float, Float>> {
         if (centerline.size < 4) return centerline
 
         val segmentOffsets = MutableList(centerline.lastIndex) { 0f to 0f }
         val earlierSamples = mutableListOf<RouteSample>()
-        val collisionDistance = cellSize * 0.19f
-        val candidateLanes = floatArrayOf(-0.29f, -0.18f, 0.18f, 0.29f)
+        val collisionDistance = cellSize * 0.20f
+        val candidateLanes = floatArrayOf(-0.30f, -0.22f, -0.14f, 0.14f, 0.22f, 0.30f)
 
         for (segmentIndex in 0 until centerline.lastIndex) {
             val (control1, control2) = curveControls(centerline, segmentIndex)
@@ -212,14 +214,23 @@ object RouteArrowRenderer {
                 val normalY = dx / tangentLength
                 var bestOffset = 0f to 0f
                 var bestClearance = minimumClearance(trace, prior)
+                var bestInboardPreference = 0f
+                val segmentCenterX = (start.first + end.first) * 0.5f
+                val towardCenter = boardCenterX - segmentCenterX
 
                 for (lane in candidateLanes) {
                     val offset = (normalX * cellSize * lane) to (normalY * cellSize * lane)
                     val shiftedTrace = trace.map { (x, y) -> (x + offset.first) to (y + offset.second) }
                     val clearance = minimumClearance(shiftedTrace, prior)
-                    if (clearance > bestClearance + cellSize * 0.015f) {
+                    val inboardPreference = if (offset.first * towardCenter > 0f) abs(offset.first) else 0f
+                    val improvesClearance = clearance > bestClearance + cellSize * 0.02f
+                    val comparableButMoreInboard =
+                        clearance >= bestClearance - cellSize * 0.02f &&
+                            inboardPreference > bestInboardPreference
+                    if (improvesClearance || comparableButMoreInboard) {
                         bestClearance = clearance
                         bestOffset = offset
+                        bestInboardPreference = inboardPreference
                     }
                 }
                 segmentOffsets[segmentIndex] = bestOffset
