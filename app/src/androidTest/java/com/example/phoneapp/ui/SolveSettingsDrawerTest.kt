@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.MainActivity
@@ -50,19 +51,19 @@ class SolveSettingsDrawerTest {
     fun boardSettingsAndRecalculationUseOneDrawer() {
         loadCapture(openSettings = false)
         waitForText("Board captured")
-        compose.onNodeWithContentDescription("Open solve settings").performClick()
+        compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
         selectChoice("Minimum combos", "No minimum")
         selectChoice("Match pattern", "No pattern requirement")
         selectChoice("Optimize color damage for", "Wood")
-        compose.onNodeWithText("Apply and solve").performClick()
+        compose.onNodeWithText("Apply and solve").performScrollTo().performClick()
 
         waitForText("Show route in PAD")
-        compose.onNodeWithContentDescription("Open solve settings").performClick()
+        compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
-        compose.onNodeWithText("Wood").assertIsDisplayed()
+        compose.onNodeWithText("Wood").performScrollTo().assertIsDisplayed()
         selectChoice("Optimize color damage for", "Fire")
-        compose.onNodeWithText("Apply and recalculate").performClick()
+        compose.onNodeWithText("Apply and recalculate").performScrollTo().performClick()
         waitForText("Fire combos")
         compose.onNodeWithText("Wood combos").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD").assertIsDisplayed()
@@ -73,11 +74,11 @@ class SolveSettingsDrawerTest {
         loadCapture(openSettings = true)
         waitForText("Apply and solve")
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
-        compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithText("Close").performScrollTo().performClick()
         compose.onNodeWithText("Board captured").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Open solve settings").performClick()
+        compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
-        compose.onNodeWithText("Apply and solve").assertIsDisplayed()
+        compose.onNodeWithText("Apply and solve").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -86,16 +87,16 @@ class SolveSettingsDrawerTest {
         compose.activityRule.scenario.recreate()
         loadCapture(openSettings = true)
         waitForText("Apply and solve")
-        compose.onNodeWithText("6 combos").assertIsDisplayed()
+        compose.onNodeWithText("6 combos").performScrollTo().assertIsDisplayed()
         selectChoice("Optimize color damage for", "Dark")
         selectChoice("Match pattern", "Cross")
-        compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithText("Close").performScrollTo().performClick()
         compose.activityRule.scenario.recreate()
         // The capture intent retains the overlay's request to open settings.
         waitForText("Apply and solve")
-        compose.onNodeWithText("6 combos").assertIsDisplayed()
-        compose.onNodeWithText("Dark").assertIsDisplayed()
-        compose.onNodeWithText("Cross").assertIsDisplayed()
+        compose.onNodeWithText("6 combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Dark").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Cross").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -120,7 +121,7 @@ class SolveSettingsDrawerTest {
         waitForText("Apply and solve")
         selectChoice("Minimum combos", "No minimum")
         selectChoice("Match pattern", "No pattern requirement")
-        compose.onNodeWithText("Apply and solve").performClick()
+        compose.onNodeWithText("Apply and solve").performScrollTo().performClick()
         val missing = File(compose.activity.filesDir, "missing-capture.png")
         sendCapture(missing, openSettings = false)
         waitForText("Board not clear enough")
@@ -130,7 +131,7 @@ class SolveSettingsDrawerTest {
     }
 
     private fun selectChoice(label: String, choice: String) {
-        compose.onNodeWithText(label).performClick()
+        compose.onNodeWithText(label).performScrollTo().performClick()
         compose.onNode(hasText(choice) and hasAnyAncestor(isPopup())).performClick()
     }
 
@@ -138,7 +139,9 @@ class SolveSettingsDrawerTest {
         compose.waitUntil(timeoutMillis = 30_000) {
             compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText(text).assertIsDisplayed()
+        val node = compose.onNodeWithText(text)
+        if (text != "Board not clear enough") node.performScrollTo()
+        node.assertIsDisplayed()
     }
 
     private fun loadCapture(openSettings: Boolean) {

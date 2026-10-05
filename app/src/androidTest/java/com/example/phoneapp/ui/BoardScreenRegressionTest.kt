@@ -4,6 +4,12 @@ import android.graphics.RectF
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -88,5 +94,23 @@ class BoardScreenRegressionTest {
         compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
         compose.onNodeWithText("New board").performClick()
         compose.runOnIdle { assertEquals(1, resets) }
+    }
+
+    @Test
+    fun settingsActionsRemainReachableInAShortWindow() {
+        var applies = 0
+        compose.setContent {
+            MaterialTheme {
+                Box(Modifier.height(420.dp)) {
+                    SolveSettingsDrawer(SolveSettings(), false, {}, "Apply and solve", { applies++ }) { open ->
+                        Button(onClick = open) { Text("Open drawer") }
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Open drawer").performClick()
+        compose.onNodeWithText("Close").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Apply and solve").performScrollTo().assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, applies) }
     }
 }

@@ -166,7 +166,7 @@ fun SolveSettingsDrawer(
         drawerContent = {
             ModalDrawerSheet {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
                     horizontalAlignment = Alignment.Start,
                 ) {
                     Text("Solve settings", style = MaterialTheme.typography.headlineSmall)
