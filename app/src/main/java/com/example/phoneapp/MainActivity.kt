@@ -162,9 +162,7 @@ class MainActivity : ComponentActivity() {
                     when {
                         isReadingCapture -> LoadingMessage("Reading the captured board…")
                         solution != null && recognition is BoardRecognition.Recognized -> {
-                            val board = (recognition as BoardRecognition.Recognized).board
                             SolutionScreen(
-                                board = board,
                                 recognition = recognition as BoardRecognition.Recognized,
                                 solution = solution!!,
                                 preferredColor = preferredColor,

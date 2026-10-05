@@ -91,8 +91,8 @@ class RouteArrowRendererScreenshotTest {
     private companion object {
         const val REFERENCE_SCREENSHOT = "Screenshot_20261004-003057.png"
         const val REFERENCE_HEIGHT = 2142f
-        const val START_BADGE_COLOR = 0xFFFFD34D.toInt()
-        const val END_BADGE_COLOR = 0xFF102A3A.toInt()
+        const val START_BADGE_COLOR = 0xFF4CAF50.toInt()
+        const val END_BADGE_COLOR = 0xFFEF4444.toInt()
         const val CENTER_TOLERANCE_PX = 6f
         val MEASURED_ROW_CENTERS = floatArrayOf(1377f, 1537f, 1697f, 1857f, 2017f)
     }

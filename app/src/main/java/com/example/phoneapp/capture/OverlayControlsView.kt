@@ -119,7 +119,7 @@ internal class OverlayControlsView(
         minimumWidth = dp(260)
     }
 
-    fun setStatus(message: String, isError: Boolean = false, busy: Boolean = false, hasCapture: Boolean = false) {
+    fun setStatus(message: String, isError: Boolean = false, busy: Boolean = false) {
         status.text = message
         status.setTextColor(if (isError) 0xFFFF8585.toInt() else 0xFFF1F5F9.toInt())
         capture.isEnabled = !busy

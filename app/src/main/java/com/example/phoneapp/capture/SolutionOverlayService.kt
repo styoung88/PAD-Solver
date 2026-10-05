@@ -81,7 +81,7 @@ class SolutionOverlayService : Service() {
                     finally { bitmap.recycle() }
                 }
                 if (recognized == null) {
-                    closeControl?.setStatus("Board not recognized. Try another capture.", isError = true, hasCapture = true)
+                    closeControl?.setStatus("Board not recognized. Try another capture.", isError = true)
                     return@launch
                 }
                 closeControl?.setStatus("Finding your route…", busy = true)
@@ -99,14 +99,14 @@ class SolutionOverlayService : Service() {
                 if (result.goalSatisfied) {
                     showRoute(recognized.boardBounds, result.path.map(recognized.board::indexOf).toIntArray(), recognized.captureWidth, recognized.captureHeight)
                 } else {
-                    closeControl?.setStatus("No matching route. Adjust your settings.", isError = true, hasCapture = true)
+                    closeControl?.setStatus("No matching route. Adjust your settings.", isError = true)
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
                 android.util.Log.e("RouteOverlay", "Automatic solve failed", error)
 
-                closeControl?.setStatus("Solve failed. Adjust settings or try again.", isError = true, hasCapture = true)
+                closeControl?.setStatus("Solve failed. Adjust settings or try again.", isError = true)
             }
         }
     }
@@ -215,7 +215,7 @@ class SolutionOverlayService : Service() {
                 toolbarParams?.let { toolbarPreferences.edit().putInt("x", it.x).putInt("y", it.y).apply() }
             },
         ).apply {
-            setStatus(if (routeView == null) "Ready for a new board" else "Route ready", hasCapture = latestCapturePath != null)
+            setStatus(if (routeView == null) "Ready for a new board" else "Route ready")
         }
         closeControl = close
         val closeParams = WindowManager.LayoutParams(

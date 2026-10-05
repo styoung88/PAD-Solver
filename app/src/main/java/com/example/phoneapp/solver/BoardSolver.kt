@@ -397,15 +397,6 @@ class BoardSolver {
         return pairs
     }
 
-    private fun analyze(cells: IntArray, columns: Int, rows: Int): BoardAnalysis =
-        BoardAnalyzer.resolveCascades(
-            Board(
-                columns = columns,
-                rows = rows,
-                orbs = cells.map { code -> Orb(colorOf(code), modifiersOf(code)) },
-            ),
-        )
-
     private fun encodeOrb(orb: Orb): Int {
         var code = orb.color.ordinal
         if (OrbModifier.LOCKED in orb.modifiers) code = code or LOCKED_BIT

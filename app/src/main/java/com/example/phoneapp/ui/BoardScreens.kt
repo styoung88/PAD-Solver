@@ -261,7 +261,6 @@ fun SolveSettingsDrawer(
 
 @Composable
 fun SolutionScreen(
-    board: Board,
     recognition: BoardRecognition.Recognized,
     solution: BoardSolution,
     preferredColor: OrbColor?,
