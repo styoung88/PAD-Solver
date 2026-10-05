@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,10 +17,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.clickable
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +33,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.getValue
@@ -41,13 +42,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.nativeCanvas
@@ -127,24 +126,30 @@ fun BoardPreviewScreen(
             actionLabel = if (isSolving) "Solving…" else "Apply and solve",
             onApply = { onSolve(preferredColor, targetComboCount, matchPatternFocus) },
         ) { openSettings ->
-            Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-            Text("Review board", style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(8.dp))
-            Text("Check the detected 6×5 layout before solving. Editing is not available yet.")
-            Spacer(Modifier.height(12.dp))
-            OrbBoard(board = recognition.board)
-            Spacer(Modifier.height(12.dp))
-            SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
-            Spacer(Modifier.height(12.dp))
-            if (isSolving) {
-                SolveProgressIndicator("Finding a route…")
-                Spacer(Modifier.height(12.dp))
-            }
-            OutlinedButton(onClick = onNewBoard, enabled = !isSolving) { Text("New board") }
+            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                        .windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    SolverAppBar(openSettings, !isSolving)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Board captured", style = MaterialTheme.typography.titleLarge)
+                            Text("Check the detected orbs below, then choose your solve settings.")
+                            SolveSettingsSummary(preferredColor, targetComboCount, matchPatternFocus)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = openSettings, enabled = !isSolving, modifier = Modifier.weight(1f)) {
+                            Text("Solve settings")
+                        }
+                        OutlinedButton(onClick = onNewBoard, enabled = !isSolving) { Text("New board") }
+                    }
+                    if (isSolving) SolveProgressIndicator("Finding a route…")
+                }
+                BoardCaption("Review board", "Check the detected 6×5 layout")
+                CapturedOrbBoard(recognition = recognition)
             }
         }
     }
@@ -241,35 +246,15 @@ private fun SolveSettingsDrawer(
             content {
                 if (!isSolving) scope.launch { drawerState.open() }
             }
-            DrawerEdgeIndicator(
-                modifier = Modifier.align(Alignment.TopStart)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(start = 2.dp, top = 8.dp),
-                onClick = { if (!isSolving) scope.launch { drawerState.open() } },
-            )
-        }
-    }
-}
 
-@Composable
-private fun DrawerEdgeIndicator(modifier: Modifier, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(topEnd = 14.dp, bottomEnd = 14.dp)
-    Box(
-        modifier = modifier
-            .size(width = 20.dp, height = 64.dp)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.secondaryContainer)
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = "Open solve settings drawer" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+        }
     }
 }
 
 @Composable
 fun SolutionScreen(
     board: Board,
+    recognition: BoardRecognition.Recognized,
     solution: BoardSolution,
     preferredColor: OrbColor?,
     targetComboCount: Int?,
@@ -304,82 +289,128 @@ fun SolutionScreen(
         val preferredColorComboCount = solution.preferredColor?.let { color ->
             solution.predictedMatches.allMatches.count { it.color == color }
         }
-        Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        if (unmetRequirements.isNotEmpty()) {
-            Text("Criteria not met", style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                buildString {
-                    append("Could not find a route that meets ${unmetRequirements.joinToString(" and ")}. ")
-                    append("Best attempt: ${solution.comboCount} combos")
-                    if (solution.preferredColor != null && preferredColorComboCount != null) {
-                        append(", including $preferredColorComboCount ${orbColorName(solution.preferredColor)} combos")
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                    .windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                SolverAppBar(openSettings, !isSolving)
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("${solution.comboCount} combos", style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            RouteStat("${solution.orbMoves}", "Orb moves", Modifier.weight(1f))
+                            RouteStat("${solution.predictedMatches.cascadeCount}", "Cascades", Modifier.weight(1f))
+                            if (solution.preferredColor != null && preferredColorComboCount != null) {
+                                RouteStat("$preferredColorComboCount", "${orbColorName(solution.preferredColor)} combos", Modifier.weight(1f))
+                            }
+                        }
+                        solution.matchPatternFocus?.let {
+                            Text("${solution.focusedPatternMatchCount ?: 0} ${it.displayName} matches",
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
+                        SolveSettingsSummary(solution.preferredColor, solution.targetComboCount, solution.matchPatternFocus)
+                        if (unmetRequirements.isNotEmpty()) {
+                            Text("Could not find a route that meets ${unmetRequirements.joinToString(" and ")}. Showing the best attempt.",
+                                color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
-                    append(".")
-                },
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    if (unmetRequirements.isEmpty()) {
+                        Button(onClick = onShowInGame, enabled = !isSolving, modifier = Modifier.weight(1f)) {
+                            Text("Show route in PAD")
+                        }
+                    } else {
+                        Button(onClick = openSettings, enabled = !isSolving, modifier = Modifier.weight(1f)) {
+                            Text("Adjust settings")
+                        }
+                    }
+                    OutlinedButton(onClick = onNewBoard, enabled = !isSolving) { Text("New board") }
+                }
+                if (isSolving) SolveProgressIndicator("Recalculating route…")
+                Spacer(Modifier.height(8.dp))
+            }
+            BoardCaption(
+                if (unmetRequirements.isEmpty()) "Suggested route" else "Captured board",
+                if (unmetRequirements.isEmpty()) "Start at green, end at red" else "Adjust settings to try another route",
             )
-            Spacer(Modifier.height(16.dp))
-            OrbBoard(board = board)
-            Spacer(Modifier.height(18.dp))
-            SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
-            if (isSolving) {
-                Spacer(Modifier.height(12.dp))
-                SolveProgressIndicator("Recalculating route…")
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onNewBoard) { Text("New board") }
-        } else {
-            Text("Suggested route", style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(6.dp))
-            val cascadeCount = solution.predictedMatches.cascadeCount
-            val cascadeSummary = when (cascadeCount) {
-                0 -> ""
-                1 -> " · 1 cascade"
-                else -> " · $cascadeCount cascades"
-            }
-            val focusedColorSummary = if (solution.preferredColor != null && preferredColorComboCount != null) {
-                " · $preferredColorComboCount ${orbColorName(solution.preferredColor)} combos"
-            } else {
-                ""
-            }
-            val focusedPatternSummary = solution.matchPatternFocus?.let { pattern ->
-                " · ${solution.focusedPatternMatchCount ?: 0} ${solution.preferredColor?.let { "${orbColorName(it)} " }.orEmpty()}${pattern.displayName} matches"
-            }.orEmpty()
-            Text("${solution.comboCount} combos$focusedColorSummary$focusedPatternSummary · ${solution.orbMoves} orb moves$cascadeSummary")
-            solution.targetComboCount?.let { target ->
-                Spacer(Modifier.height(4.dp))
-                Text(
-                "Minimum: $target combos reached",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            Spacer(Modifier.height(16.dp))
-            OrbBoard(board = board, path = solution.path)
-            Spacer(Modifier.height(12.dp))
-            Text("Start at S and follow the arrows to E.")
-            Spacer(Modifier.height(18.dp))
-            SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
-            if (isSolving) {
-                Spacer(Modifier.height(12.dp))
-                SolveProgressIndicator("Recalculating route…")
-            }
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = onShowInGame, enabled = !isSolving) { Text("Show route in PAD") }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onNewBoard) { Text("New board") }
+            CapturedOrbBoard(recognition, if (unmetRequirements.isEmpty()) solution.path else emptyList())
         }
     }
 }
+
+@Composable
+private fun SolverAppBar(onSettings: () -> Unit, enabled: Boolean) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text("PAD Solver", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        IconButton(onClick = onSettings, enabled = enabled,
+            modifier = Modifier.semantics { contentDescription = "Open solve settings" }) {
+            Text("⚙", style = MaterialTheme.typography.headlineSmall)
+        }
+    }
 }
 
+@Composable
+private fun RouteStat(value: String, label: String, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(value, style = MaterialTheme.typography.titleLarge)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SolveSettingsSummary(color: OrbColor?, target: Int?, pattern: MatchPattern?) {
+    val summary = listOfNotNull(
+        color?.let { "${orbColorName(it)} focus" } ?: "Any color",
+        target?.let { "Minimum $it combos" },
+        pattern?.displayName,
+    ).joinToString(" · ")
+    Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun BoardCaption(title: String, hint: String) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Text(hint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+@Composable
+private fun CapturedOrbBoard(
+    recognition: BoardRecognition.Recognized,
+    path: List<BoardPosition> = emptyList(),
+) {
+    val density = LocalDensity.current
+    val windowHeight = LocalWindowInfo.current.containerSize.height
+    val navigationBarHeight = WindowInsets.navigationBars.getBottom(density)
+    // Match the working overlay: its window excludes the bottom navigation bar,
+    // and screenshot Y coordinates are scaled into that usable window height.
+    val overlayHeight = (windowHeight - navigationBarHeight).coerceAtLeast(1)
+    val scaleY = overlayHeight.toFloat() / recognition.captureHeight.coerceAtLeast(1)
+    val boardHeight = with(density) { (recognition.boardBounds.height() * scaleY).toDp() }
+    val bottomGap = with(density) {
+        (navigationBarHeight +
+            (recognition.captureHeight - recognition.boardBounds.bottom).coerceAtLeast(0f) * scaleY).toDp()
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val previewAspectRatio = maxWidth.value / boardHeight.value.coerceAtLeast(1f)
+        Column {
+            OrbBoard(
+                board = recognition.board,
+                path = path,
+                boardAspectRatio = previewAspectRatio,
+            )
+            Spacer(Modifier.height(bottomGap))
+        }
+    }
+}
 @Composable
 private fun SolveProgressIndicator(message: String) {
     Row(
@@ -388,32 +419,6 @@ private fun SolveProgressIndicator(message: String) {
     ) {
         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         Text(message)
-    }
-}
-
-@Composable
-private fun SettingsDrawerTrigger(onClick: () -> Unit, enabled: Boolean) {
-    val iconColor = MaterialTheme.colorScheme.onSurfaceVariant
-    OutlinedButton(onClick = onClick, enabled = enabled) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Canvas(Modifier.size(width = 18.dp, height = 16.dp)) {
-                val strokeWidth = size.height * 0.12f
-                listOf(0.2f, 0.5f, 0.8f).forEach { fraction ->
-                    val y = size.height * fraction
-                    drawLine(
-                        color = iconColor,
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = strokeWidth,
-                        cap = StrokeCap.Round,
-                    )
-                }
-            }
-            Text("Open settings")
-        }
     }
 }
 
@@ -554,19 +559,21 @@ fun OrbBoard(
     board: Board,
     path: List<BoardPosition> = emptyList(),
     modifier: Modifier = Modifier,
+    boardAspectRatio: Float = board.columns.toFloat() / board.rows.toFloat(),
 ) {
     val preparedRoute = remember(path, board.columns, board.rows) {
         if (path.isEmpty()) null else RouteArrowRenderer.prepareRoute(path, board.columns, board.rows)
     }
     Canvas(
-        modifier = modifier.fillMaxWidth().aspectRatio(board.columns.toFloat() / board.rows.toFloat())
-            .background(Color(0xFF202631), MaterialTheme.shapes.medium).padding(4.dp),
+        modifier = modifier.fillMaxWidth().aspectRatio(boardAspectRatio)
+            .background(Color(0xFF202631), MaterialTheme.shapes.medium),
     ) {
         val cellWidth = size.width / board.columns
         val cellHeight = size.height / board.rows
         val native = drawContext.canvas.nativeCanvas
         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        val radius = minOf(cellWidth, cellHeight) * 0.38f
+        // PAD's round orbs nearly fill each cell, with a narrow gap between neighbors.
+        val radius = minOf(cellWidth, cellHeight) * 0.47f
 
         for (row in 0 until board.rows) {
             for (column in 0 until board.columns) {
