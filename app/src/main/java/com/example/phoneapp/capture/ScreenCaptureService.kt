@@ -22,17 +22,19 @@ import android.os.HandlerThread
 import android.os.IBinder
 import android.util.DisplayMetrics
 import androidx.core.app.NotificationCompat
-import com.example.phoneapp.MainActivity
 import com.example.phoneapp.R
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ScreenCaptureService : Service() {
+    @Volatile private var frameReady = false
     private val capturePending = AtomicBoolean(false)
+    @Volatile private var captureSequence = 0
+    private val mainHandler = Handler(android.os.Looper.getMainLooper())
     private var projection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
-    private var imageReader: ImageReader? = null
+    @Volatile private var imageReader: ImageReader? = null
     private var worker: HandlerThread? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -46,6 +48,7 @@ class ScreenCaptureService : Service() {
     }
 
     private fun startProjection(intent: Intent) {
+        if (projection != null) return
         startAsForeground()
         val resultData = intent.parcelableExtra<Intent>(EXTRA_RESULT_DATA)
         val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
@@ -89,19 +92,33 @@ class ScreenCaptureService : Service() {
             null,
             handler,
         )
+        active = virtualDisplay != null
+        intent.parcelableExtra<android.os.ResultReceiver>(EXTRA_READY_RECEIVER)?.send(if (active) 1 else 0, null)
     }
 
     private fun onImageAvailable(reader: ImageReader) {
-        val image = reader.acquireLatestImage() ?: return
-        if (!capturePending.compareAndSet(true, false)) {
+        val image = runCatching { reader.acquireLatestImage() }.getOrNull() ?: return
+        if (reader !== imageReader || !frameReady || !capturePending.compareAndSet(true, false)) {
             image.close()
             return
         }
-        val frame = image.use(::imageToBitmap) ?: run {
-            updateNotification("Could not read the screen. Tap Capture board to retry.")
+        val frame = runCatching { image.use(::imageToBitmap) }.onFailure {
+            android.util.Log.e("PadCapture", "Could not read captured pixels", it)
+        }.getOrNull() ?: run {
+            updateNotification("Could not read the screen. Retry from the overlay.")
+            reportCaptureFailure()
             return
         }
-        saveCapture(frame)
+        runCatching { saveCapture(frame) }.onFailure {
+            android.util.Log.e("PadCapture", "Could not save capture", it)
+            reportCaptureFailure()
+        }
+    }
+
+    private fun reportCaptureFailure() {
+        if (SolutionOverlayService.enabled) {
+            startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_CAPTURE_FAILED))
+        }
     }
 
     private fun imageToBitmap(image: Image): Bitmap? {
@@ -118,7 +135,39 @@ class ScreenCaptureService : Service() {
     }
 
     private fun captureCurrentFrame() {
-        if (!capturePending.compareAndSet(false, true)) return
+        if (projection == null || !SolutionOverlayService.enabled || capturePending.get()) return
+        val sequence = ++captureSequence
+        if (SolutionOverlayService.enabled) {
+            startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_PROCESSING))
+        }
+        frameReady = false
+        capturePending.set(true)
+        virtualDisplay?.surface = null
+        mainHandler.postDelayed({
+            val captureWorker = worker ?: return@postDelayed
+            Handler(captureWorker.looper).post {
+                if (!active || sequence != captureSequence) return@post
+                runCatching {
+                    val previous = imageReader ?: return@post
+                    val fresh = replaceCaptureReader(previous)
+                    fresh.setOnImageAvailableListener(::onImageAvailable, Handler(captureWorker.looper))
+                    imageReader = fresh
+                    frameReady = true
+                    virtualDisplay?.surface = fresh.surface
+                }.onFailure {
+                    capturePending.set(false)
+                    android.util.Log.e("PadCapture", "Could not prepare fresh capture", it)
+                    reportCaptureFailure()
+                }
+            }
+        }, 350)
+        mainHandler.postDelayed({
+            if (sequence == captureSequence && capturePending.compareAndSet(true, false)) {
+                reportCaptureFailure()
+                android.util.Log.w("PadCapture", "Capture timed out waiting for a fresh frame")
+                updateNotification("Capture timed out. Retry from the overlay.")
+            }
+        }, 5000)
         updateNotification("Capturing the current screen…")
     }
 
@@ -132,15 +181,13 @@ class ScreenCaptureService : Service() {
             frame.recycle()
         }
 
-        val reviewIntent = Intent(this, MainActivity::class.java).apply {
-            action = ACTION_REVIEW_CAPTURE
-            putExtra(EXTRA_CAPTURE_PATH, captureFile.absolutePath)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        try {
-            startActivity(reviewIntent)
-        } finally {
-            stopSelf()
+        if (SolutionOverlayService.enabled) {
+            startService(Intent(this, SolutionOverlayService::class.java).apply {
+                action = SolutionOverlayService.ACTION_SOLVE_CAPTURE
+                putExtra(EXTRA_CAPTURE_PATH, captureFile.absolutePath)
+            })
+            updateNotification("Ready for the next board.")
+            return
         }
     }
 
@@ -153,7 +200,7 @@ class ScreenCaptureService : Service() {
             description = "Visible while the app is capturing a PAD board by request."
         }
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
-        val notification = makeNotification("Switch to PAD, then use this notification to capture the board.")
+        val notification = makeNotification("Use Capture in the PAD overlay, or take a phone screenshot.")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
         } else {
@@ -167,13 +214,6 @@ class ScreenCaptureService : Service() {
     }
 
     private fun makeNotification(message: String): Notification {
-        val captureIntent = Intent(this, ScreenCaptureService::class.java).setAction(ACTION_CAPTURE_NOW)
-        val capturePendingIntent = PendingIntent.getService(
-            this,
-            REQUEST_CAPTURE,
-            captureIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
         val stopIntent = Intent(this, ScreenCaptureService::class.java).setAction(ACTION_STOP)
         val stopPendingIntent = PendingIntent.getService(
             this,
@@ -183,16 +223,18 @@ class ScreenCaptureService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("PAD board capture is active")
+            .setContentTitle("PAD overlay screen sharing")
             .setContentText(message)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(R.drawable.ic_notification, "Capture board", capturePendingIntent)
-            .addAction(R.drawable.ic_notification, "Stop capture", stopPendingIntent)
+            .addAction(R.drawable.ic_notification, "Stop sharing", stopPendingIntent)
             .build()
     }
 
     override fun onDestroy() {
+        active = false
+        mainHandler.removeCallbacksAndMessages(null)
+        stopService(Intent(this, SolutionOverlayService::class.java))
         virtualDisplay?.release()
         virtualDisplay = null
         imageReader?.close()
@@ -213,17 +255,23 @@ class ScreenCaptureService : Service() {
         }
 
     companion object {
+        internal fun replaceCaptureReader(previous: ImageReader): ImageReader {
+            val fresh = ImageReader.newInstance(previous.width, previous.height, PixelFormat.RGBA_8888, 2)
+            previous.close()
+            return fresh
+        }
+        @Volatile var active = false
+            private set
         const val ACTION_START = "com.example.phoneapp.action.START_CAPTURE"
         const val ACTION_CAPTURE_NOW = "com.example.phoneapp.action.CAPTURE_NOW"
         const val ACTION_STOP = "com.example.phoneapp.action.STOP_CAPTURE"
-        const val ACTION_REVIEW_CAPTURE = "com.example.phoneapp.action.REVIEW_CAPTURE"
         const val EXTRA_RESULT_CODE = "capture_result_code"
         const val EXTRA_RESULT_DATA = "capture_result_data"
         const val EXTRA_CAPTURE_PATH = "capture_path"
+        const val EXTRA_READY_RECEIVER = "capture_ready_receiver"
         private const val CAPTURE_FILE_NAME = "last-board-capture.png"
         private const val CHANNEL_ID = "pad_screen_capture"
         private const val NOTIFICATION_ID = 41
         private const val REQUEST_STOP = 42
-        private const val REQUEST_CAPTURE = 43
     }
 }

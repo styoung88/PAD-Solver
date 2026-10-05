@@ -77,12 +77,12 @@ fun HomeScreen(onCapture: () -> Unit, onChooseScreenshot: () -> Unit) {
             style = MaterialTheme.typography.bodyLarge,
         )
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onCapture) { Text("Capture board") }
+        Button(onClick = onCapture) { Text("Open PAD overlay") }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onChooseScreenshot) { Text("Choose existing screenshot") }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Screen capture and notifications are used to capture the board. Draw-over-apps access is only needed to show the route.",
+            "Allow screen sharing and draw-over-apps access, then use Capture in the overlay. Full photo access also enables the phone screenshot shortcut.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -156,7 +156,7 @@ fun BoardPreviewScreen(
 }
 
 @Composable
-private fun SolveSettingsDrawer(
+fun SolveSettingsDrawer(
     preferredColor: OrbColor?,
     targetComboCount: Int?,
     matchPatternFocus: MatchPattern?,
@@ -166,10 +166,18 @@ private fun SolveSettingsDrawer(
     onMatchPatternFocusChanged: (MatchPattern?) -> Unit,
     actionLabel: String,
     onApply: () -> Unit,
+    openRequested: Boolean = false,
+    onOpenHandled: () -> Unit = {},
     content: @Composable (openSettings: () -> Unit) -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(openRequested) {
+        if (openRequested) {
+            drawerState.open()
+            onOpenHandled()
+        }
+    }
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
