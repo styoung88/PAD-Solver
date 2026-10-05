@@ -23,6 +23,7 @@ import android.os.IBinder
 import android.util.DisplayMetrics
 import androidx.core.app.NotificationCompat
 import com.example.phoneapp.R
+import com.example.phoneapp.util.parcelableExtra
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
@@ -247,12 +248,6 @@ class ScreenCaptureService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    private inline fun <reified T : android.os.Parcelable> Intent.parcelableExtra(key: String): T? =
-        if (Build.VERSION.SDK_INT >= 33) getParcelableExtra(key, T::class.java) else {
-            @Suppress("DEPRECATION")
-            getParcelableExtra(key)
-        }
 
     companion object {
         internal fun replaceCaptureReader(previous: ImageReader): ImageReader {

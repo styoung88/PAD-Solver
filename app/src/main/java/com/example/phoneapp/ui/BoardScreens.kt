@@ -62,6 +62,7 @@ import com.example.phoneapp.board.OrbModifier
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.MatchPattern
+import com.example.phoneapp.solver.SolveSettings
 
 @Composable
 fun HomeScreen(onCapture: () -> Unit, onChooseScreenshot: () -> Unit) {
@@ -93,13 +94,8 @@ fun HomeScreen(onCapture: () -> Unit, onChooseScreenshot: () -> Unit) {
 fun BoardPreviewScreen(
     recognition: BoardRecognition,
     isSolving: Boolean,
-    preferredColor: OrbColor?,
-    targetComboCount: Int?,
-    matchPatternFocus: MatchPattern?,
-    onPreferredColorChanged: (OrbColor?) -> Unit,
-    onTargetComboCountChanged: (Int?) -> Unit,
-    onMatchPatternFocusChanged: (MatchPattern?) -> Unit,
-    onSolve: (OrbColor?, Int?, MatchPattern?) -> Unit,
+    settings: SolveSettings,
+    onOpenSettings: () -> Unit,
     onNewBoard: () -> Unit,
 ) {
     when (recognition) {
@@ -115,33 +111,23 @@ fun BoardPreviewScreen(
             Button(onClick = onNewBoard) { Text("New board") }
         }
 
-        is BoardRecognition.Recognized -> SolveSettingsDrawer(
-            preferredColor = preferredColor,
-            targetComboCount = targetComboCount,
-            matchPatternFocus = matchPatternFocus,
-            isSolving = isSolving,
-            onPreferredColorChanged = onPreferredColorChanged,
-            onTargetComboCountChanged = onTargetComboCountChanged,
-            onMatchPatternFocusChanged = onMatchPatternFocusChanged,
-            actionLabel = if (isSolving) "Solving…" else "Apply and solve",
-            onApply = { onSolve(preferredColor, targetComboCount, matchPatternFocus) },
-        ) { openSettings ->
+        is BoardRecognition.Recognized -> {
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
                         .windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    SolverAppBar(openSettings, !isSolving)
+                    SolverAppBar(onOpenSettings, !isSolving)
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Board captured", style = MaterialTheme.typography.titleLarge)
                             Text("Check the detected orbs below, then choose your solve settings.")
-                            SolveSettingsSummary(preferredColor, targetComboCount, matchPatternFocus)
+                            SolveSettingsSummary(settings.preferredColor, settings.targetComboCount, settings.matchPatternFocus)
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = openSettings, enabled = !isSolving, modifier = Modifier.weight(1f)) {
+                        Button(onClick = onOpenSettings, enabled = !isSolving, modifier = Modifier.weight(1f)) {
                             Text("Solve settings")
                         }
                         OutlinedButton(onClick = onNewBoard, enabled = !isSolving) { Text("New board") }
@@ -157,13 +143,9 @@ fun BoardPreviewScreen(
 
 @Composable
 fun SolveSettingsDrawer(
-    preferredColor: OrbColor?,
-    targetComboCount: Int?,
-    matchPatternFocus: MatchPattern?,
+    settings: SolveSettings,
     isSolving: Boolean,
-    onPreferredColorChanged: (OrbColor?) -> Unit,
-    onTargetComboCountChanged: (Int?) -> Unit,
-    onMatchPatternFocusChanged: (MatchPattern?) -> Unit,
+    onSettingsChanged: (SolveSettings) -> Unit,
     actionLabel: String,
     onApply: () -> Unit,
     openRequested: Boolean = false,
@@ -180,6 +162,7 @@ fun SolveSettingsDrawer(
     }
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = !isSolving,
         drawerContent = {
             ModalDrawerSheet {
                 Column(
@@ -199,25 +182,25 @@ fun SolveSettingsDrawer(
                             Text("Combo target", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             ComboTargetDropdown(
-                                selectedTarget = targetComboCount,
+                                selectedTarget = settings.targetComboCount,
                                 enabled = !isSolving,
-                                onTargetSelected = onTargetComboCountChanged,
+                                onTargetSelected = { onSettingsChanged(settings.copy(targetComboCount = it)) },
                             )
                             Spacer(Modifier.height(16.dp))
                             Text("Required match pattern", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             MatchPatternDropdown(
-                                selectedPattern = matchPatternFocus,
+                                selectedPattern = settings.matchPatternFocus,
                                 enabled = !isSolving,
-                                onPatternSelected = onMatchPatternFocusChanged,
+                                onPatternSelected = { onSettingsChanged(settings.copy(matchPatternFocus = it)) },
                             )
                             Spacer(Modifier.height(16.dp))
                             Text("Color focus", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             OrbColorDropdown(
-                                selectedColor = preferredColor,
+                                selectedColor = settings.preferredColor,
                                 enabled = !isSolving,
-                                onColorSelected = onPreferredColorChanged,
+                                onColorSelected = { onSettingsChanged(settings.copy(preferredColor = it)) },
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -263,90 +246,72 @@ fun SolveSettingsDrawer(
 fun SolutionScreen(
     recognition: BoardRecognition.Recognized,
     solution: BoardSolution,
-    preferredColor: OrbColor?,
-    targetComboCount: Int?,
-    matchPatternFocus: MatchPattern?,
     isSolving: Boolean,
-    onPreferredColorChanged: (OrbColor?) -> Unit,
-    onTargetComboCountChanged: (Int?) -> Unit,
-    onMatchPatternFocusChanged: (MatchPattern?) -> Unit,
-    onRecalculate: (OrbColor?, Int?, MatchPattern?) -> Unit,
+    onOpenSettings: () -> Unit,
     onShowInGame: () -> Unit,
     onNewBoard: () -> Unit,
 ) {
-    SolveSettingsDrawer(
-        preferredColor = preferredColor,
-        targetComboCount = targetComboCount,
-        matchPatternFocus = matchPatternFocus,
-        isSolving = isSolving,
-        onPreferredColorChanged = onPreferredColorChanged,
-        onTargetComboCountChanged = onTargetComboCountChanged,
-        onMatchPatternFocusChanged = onMatchPatternFocusChanged,
-        actionLabel = if (isSolving) "Recalculating route…" else "Apply and recalculate",
-        onApply = { onRecalculate(preferredColor, targetComboCount, matchPatternFocus) },
-    ) { openSettings ->
-        val unmetRequirements = buildList {
-            if (solution.targetComboCount != null && solution.comboMinimumSatisfied != true) {
-                add("at least ${solution.targetComboCount} combos")
-            }
-            if (solution.matchPatternFocus != null && solution.matchPatternSatisfied != true) {
-                add("a ${solution.preferredColor?.let { "${orbColorName(it)} " }.orEmpty()}${solution.matchPatternFocus.displayName} match")
-            }
+    val unmetRequirements = buildList {
+        if (solution.targetComboCount != null && solution.comboMinimumSatisfied != true) {
+            add("at least ${solution.targetComboCount} combos")
         }
-        val preferredColorComboCount = solution.preferredColor?.let { color ->
-            solution.predictedMatches.allMatches.count { it.color == color }
+        if (solution.matchPatternFocus != null && solution.matchPatternSatisfied != true) {
+            add("a ${solution.preferredColor?.let { "${orbColorName(it)} " }.orEmpty()}${solution.matchPatternFocus.displayName} match")
         }
-        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Column(
-                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
-                    .windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                SolverAppBar(openSettings, !isSolving)
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("${solution.comboCount} combos", style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            RouteStat("${solution.orbMoves}", "Orb moves", Modifier.weight(1f))
-                            RouteStat("${solution.predictedMatches.cascadeCount}", "Cascades", Modifier.weight(1f))
-                            if (solution.preferredColor != null && preferredColorComboCount != null) {
-                                RouteStat("$preferredColorComboCount", "${orbColorName(solution.preferredColor)} combos", Modifier.weight(1f))
-                            }
-                        }
-                        solution.matchPatternFocus?.let {
-                            Text("${solution.focusedPatternMatchCount ?: 0} ${it.displayName} matches",
-                                style = MaterialTheme.typography.bodyMedium)
-                        }
-                        SolveSettingsSummary(solution.preferredColor, solution.targetComboCount, solution.matchPatternFocus)
-                        if (unmetRequirements.isNotEmpty()) {
-                            Text("Could not find a route that meets ${unmetRequirements.joinToString(" and ")}. Showing the best attempt.",
-                                color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    }
+    val preferredColorComboCount = solution.preferredColor?.let { color ->
+        solution.predictedMatches.allMatches.count { it.color == color }
+    }
+    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                .windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            SolverAppBar(onOpenSettings, !isSolving)
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("${solution.comboCount} combos", style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        RouteStat("${solution.orbMoves}", "Orb moves", Modifier.weight(1f))
+                        RouteStat("${solution.predictedMatches.cascadeCount}", "Cascades", Modifier.weight(1f))
+                        if (solution.preferredColor != null && preferredColorComboCount != null) {
+                            RouteStat("$preferredColorComboCount", "${orbColorName(solution.preferredColor)} combos", Modifier.weight(1f))
                         }
                     }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    if (unmetRequirements.isEmpty()) {
-                        Button(onClick = onShowInGame, enabled = !isSolving, modifier = Modifier.weight(1f)) {
-                            Text("Show route in PAD")
-                        }
-                    } else {
-                        Button(onClick = openSettings, enabled = !isSolving, modifier = Modifier.weight(1f)) {
-                            Text("Adjust settings")
-                        }
+                    solution.matchPatternFocus?.let {
+                        Text("${solution.focusedPatternMatchCount ?: 0} ${it.displayName} matches",
+                            style = MaterialTheme.typography.bodyMedium)
                     }
-                    OutlinedButton(onClick = onNewBoard, enabled = !isSolving) { Text("New board") }
+                    SolveSettingsSummary(solution.preferredColor, solution.targetComboCount, solution.matchPatternFocus)
+                    if (unmetRequirements.isNotEmpty()) {
+                        Text("Could not find a route that meets ${unmetRequirements.joinToString(" and ")}. Showing the best attempt.",
+                            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
-                if (isSolving) SolveProgressIndicator("Recalculating route…")
-                Spacer(Modifier.height(8.dp))
             }
-            BoardCaption(
-                if (unmetRequirements.isEmpty()) "Suggested route" else "Captured board",
-                if (unmetRequirements.isEmpty()) "Start at green, end at red" else "Adjust settings to try another route",
-            )
-            CapturedOrbBoard(recognition, if (unmetRequirements.isEmpty()) solution.path else emptyList())
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                if (unmetRequirements.isEmpty()) {
+                    Button(onClick = onShowInGame, enabled = !isSolving, modifier = Modifier.weight(1f)) {
+                        Text("Show route in PAD")
+                    }
+                } else {
+                    Button(onClick = onOpenSettings, enabled = !isSolving, modifier = Modifier.weight(1f)) {
+                        Text("Adjust settings")
+                    }
+                }
+                OutlinedButton(onClick = onNewBoard, enabled = !isSolving) { Text("New board") }
+            }
+            if (isSolving) SolveProgressIndicator("Recalculating route…")
+            Spacer(Modifier.height(8.dp))
         }
+        BoardCaption(
+            if (unmetRequirements.isEmpty()) "Suggested route" else "Captured board",
+            if (unmetRequirements.isEmpty()) "Start at green, end at red" else "Adjust settings to try another route",
+        )
+        CapturedOrbBoard(recognition, if (unmetRequirements.isEmpty()) solution.path else emptyList())
     }
 }
 
@@ -430,129 +395,84 @@ private fun SolveProgressIndicator(message: String) {
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 private fun OrbColorDropdown(
     selectedColor: OrbColor?,
     enabled: Boolean,
     onColorSelected: (OrbColor?) -> Unit,
 ) {
-    val colorChoices = listOf(
-        null to "Any color",
-        OrbColor.FIRE to "Fire",
-        OrbColor.WATER to "Water",
-        OrbColor.WOOD to "Wood",
-        OrbColor.LIGHT to "Light",
-        OrbColor.DARK to "Dark",
+    ChoiceDropdown(
+        selectedValue = selectedColor,
+        choices = listOf(null to "Any color") + OrbColor.attackingColors.map { it to orbColorName(it) },
+        label = "Optimize color damage for",
+        enabled = enabled,
+        onSelected = onColorSelected,
     )
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        OutlinedTextField(
-            value = colorChoices.first { it.first == selectedColor }.second,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Optimize color damage for") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor(
-                type = androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable,
-                enabled = enabled,
-            ).fillMaxWidth(),
-            enabled = enabled,
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            colorChoices.forEach { (color, label) ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        onColorSelected(color)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 private fun ComboTargetDropdown(
     selectedTarget: Int?,
     enabled: Boolean,
     onTargetSelected: (Int?) -> Unit,
 ) {
-    val choices = listOf(
-        null to "No minimum",
-        5 to "5 combos",
-        7 to "7 combos",
-        10 to "10 combos",
+    val targets = listOfNotNull(5, 7, 10, selectedTarget).distinct().sorted()
+    ChoiceDropdown(
+        selectedValue = selectedTarget,
+        choices = listOf(null to "No minimum") + targets.map { it to "$it combos" },
+        label = "Minimum combos",
+        enabled = enabled,
+        onSelected = onTargetSelected,
     )
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        OutlinedTextField(
-            value = choices.first { it.first == selectedTarget }.second,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Minimum combos") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor(
-                type = androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable,
-                enabled = enabled,
-            ).fillMaxWidth(),
-            enabled = enabled,
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            choices.forEach { (target, label) ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        onTargetSelected(target)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 private fun MatchPatternDropdown(
     selectedPattern: MatchPattern?,
     enabled: Boolean,
     onPatternSelected: (MatchPattern?) -> Unit,
 ) {
-    val choices = listOf(null to "No pattern requirement") + MatchPattern.entries.map { it to it.displayName }
+    ChoiceDropdown(
+        selectedValue = selectedPattern,
+        choices = listOf(null to "No pattern requirement") + MatchPattern.entries.map { it to it.displayName },
+        label = "Match pattern",
+        enabled = enabled,
+        onSelected = onPatternSelected,
+    )
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun <T> ChoiceDropdown(
+    selectedValue: T?,
+    choices: List<Pair<T?, String>>,
+    label: String,
+    enabled: Boolean,
+    onSelected: (T?) -> Unit,
+) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
+        expanded = expanded && enabled,
+        onExpandedChange = { expanded = it && enabled },
         modifier = Modifier.fillMaxWidth(),
     ) {
         OutlinedTextField(
-            value = choices.first { it.first == selectedPattern }.second,
+            value = choices.firstOrNull { it.first == selectedValue }?.second ?: choices.first().second,
             onValueChange = {},
             readOnly = true,
-            label = { Text("Match pattern") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded && enabled) },
             modifier = Modifier.menuAnchor(
                 type = androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable,
                 enabled = enabled,
             ).fillMaxWidth(),
             enabled = enabled,
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            choices.forEach { (pattern, label) ->
+        ExposedDropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
+            choices.forEach { (value, choiceLabel) ->
                 DropdownMenuItem(
-                    text = { Text(label) },
+                    text = { Text(choiceLabel) },
                     onClick = {
-                        onPatternSelected(pattern)
+                        onSelected(value)
                         expanded = false
                     },
                 )
@@ -560,7 +480,6 @@ private fun MatchPatternDropdown(
         }
     }
 }
-
 @Composable
 fun OrbBoard(
     board: Board,

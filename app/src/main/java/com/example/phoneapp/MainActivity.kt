@@ -34,15 +34,11 @@ import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.capture.PadBoardRecognizer
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
-import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.BoardSolver
-import com.example.phoneapp.solver.MaximizeColorDamage
-import com.example.phoneapp.solver.MaximizeCombos
-import com.example.phoneapp.solver.MaximizeMatchPattern
-import com.example.phoneapp.solver.MatchPattern
 import com.example.phoneapp.solver.SolveOptions
-import com.example.phoneapp.solver.TargetComboCount
+import com.example.phoneapp.solver.SolveSettings
+import com.example.phoneapp.solver.SolveSettingsStore
 import com.example.phoneapp.ui.BoardPreviewScreen
 import com.example.phoneapp.ui.HomeScreen
 import com.example.phoneapp.ui.SolveSettingsDrawer
@@ -54,9 +50,8 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     private var recognition by mutableStateOf<BoardRecognition?>(null)
     private var solution by mutableStateOf<BoardSolution?>(null)
-    private var preferredColor by mutableStateOf<OrbColor?>(null)
-    private var targetComboCount by mutableStateOf<Int?>(null)
-    private var matchPatternFocus by mutableStateOf<MatchPattern?>(null)
+    private var solveSettings by mutableStateOf(SolveSettings())
+    private val settingsStore by lazy { SolveSettingsStore(this) }
     private var isReadingCapture by mutableStateOf(false)
     private var isSolving by mutableStateOf(false)
     private var solveRunId = 0
@@ -132,70 +127,51 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        preferredColor = getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE)
-            .getString(PREFERRED_COLOR_KEY, null)
-            ?.let { value -> runCatching { OrbColor.valueOf(value) }.getOrNull() }
-        targetComboCount = getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE)
-            .getInt(TARGET_COMBO_COUNT_KEY, 0)
-            .takeIf { it > 0 }
-        matchPatternFocus = getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE)
-            .getString(MATCH_PATTERN_KEY, null)
-            ?.let { value -> runCatching { MatchPattern.valueOf(value) }.getOrNull() }
+        solveSettings = settingsStore.load()
         intent.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(::loadCapture)
         overlaySettingsRequested = intent.getBooleanExtra(SolutionOverlayService.EXTRA_OPEN_SETTINGS, false)
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     SolveSettingsDrawer(
-                        preferredColor = preferredColor,
-                        targetComboCount = targetComboCount,
-                        matchPatternFocus = matchPatternFocus,
+                        settings = solveSettings,
                         isSolving = isSolving,
-                        onPreferredColorChanged = ::updatePreferredColor,
-                        onTargetComboCountChanged = ::updateTargetComboCount,
-                        onMatchPatternFocusChanged = ::updateMatchPatternFocus,
-                        actionLabel = if (recognition is BoardRecognition.Recognized) "Apply and solve" else "Done",
-                        onApply = { solveBoard() },
+                        onSettingsChanged = ::updateSolveSettings,
+                        actionLabel = when {
+                            solution != null -> if (isSolving) "Recalculating route…" else "Apply and recalculate"
+                            recognition is BoardRecognition.Recognized -> if (isSolving) "Solving…" else "Apply and solve"
+                            else -> "Done"
+                        },
+                        onApply = ::solveBoard,
                         openRequested = overlaySettingsRequested && !isReadingCapture,
                         onOpenHandled = { overlaySettingsRequested = false },
-                    ) {
-                    when {
-                        isReadingCapture -> LoadingMessage("Reading the captured board…")
-                        solution != null && recognition is BoardRecognition.Recognized -> {
-                            SolutionScreen(
-                                recognition = recognition as BoardRecognition.Recognized,
-                                solution = solution!!,
-                                preferredColor = preferredColor,
-                                targetComboCount = targetComboCount,
-                                matchPatternFocus = matchPatternFocus,
+                    ) { openSettings ->
+                        when {
+                            isReadingCapture -> LoadingMessage("Reading the captured board…")
+                            solution != null && recognition is BoardRecognition.Recognized -> {
+                                SolutionScreen(
+                                    recognition = recognition as BoardRecognition.Recognized,
+                                    solution = solution!!,
+                                    isSolving = isSolving,
+                                    onOpenSettings = openSettings,
+                                    onShowInGame = { showSolutionInPad(solution!!) },
+                                    onNewBoard = { resetToHome() },
+                                )
+                            }
+                            recognition != null -> BoardPreviewScreen(
+                                recognition = recognition!!,
                                 isSolving = isSolving,
-                                onPreferredColorChanged = ::updatePreferredColor,
-                                onTargetComboCountChanged = ::updateTargetComboCount,
-                                onMatchPatternFocusChanged = ::updateMatchPatternFocus,
-                                onRecalculate = ::solveBoard,
-                                onShowInGame = { showSolutionInPad(solution!!) },
-                                onNewBoard = { resetToHome() },
+                                settings = solveSettings,
+                                onOpenSettings = openSettings,
+                                onNewBoard = ::resetToHome,
                             )
+                            else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                HomeScreen(
+                                    onCapture = ::startCaptureFlow,
+                                    onChooseScreenshot = ::chooseExistingScreenshot,
+                                )
+                            }
                         }
-                        recognition != null -> BoardPreviewScreen(
-                            recognition = recognition!!,
-                            isSolving = isSolving,
-                            preferredColor = preferredColor,
-                            targetComboCount = targetComboCount,
-                            matchPatternFocus = matchPatternFocus,
-                            onPreferredColorChanged = ::updatePreferredColor,
-                            onTargetComboCountChanged = ::updateTargetComboCount,
-                            onMatchPatternFocusChanged = ::updateMatchPatternFocus,
-                            onSolve = ::solveBoard,
-                            onNewBoard = ::resetToHome,
-                        )
-                        else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            HomeScreen(
-                                onCapture = ::startCaptureFlow,
-                                onChooseScreenshot = ::chooseExistingScreenshot,
-                            )
-                        }
-                    }
                     }
                 }
             }
@@ -294,26 +270,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun solveBoard(
-        color: OrbColor? = preferredColor,
-        targetComboCount: Int? = this.targetComboCount,
-        pattern: MatchPattern? = this.matchPatternFocus,
-    ) {
+    private fun solveBoard() {
         val board = (recognition as? BoardRecognition.Recognized)?.board ?: return
         if (isSolving) return
+        val settings = solveSettings
         isSolving = true
         solveJob = lifecycleScope.launch {
             val runId = ++solveRunId
             val startedAt = SystemClock.elapsedRealtime()
-            val goal = when {
-                targetComboCount != null -> TargetComboCount(targetComboCount, color, pattern)
-                pattern != null -> MaximizeMatchPattern(pattern, color)
-                color != null -> MaximizeColorDamage(color)
-                else -> MaximizeCombos
-            }
+            val goal = settings.toGoal()
             Log.i(
                 SOLVER_LOG_TAG,
-                "solve[$runId] start color=$color targetCombos=$targetComboCount pattern=$pattern",
+                "solve[$runId] start color=${settings.preferredColor} " +
+                    "targetCombos=${settings.targetComboCount} pattern=${settings.matchPatternFocus}",
             )
             runCatching { BoardSolver().solve(board, SolveOptions(goal = goal)) }
                 .onSuccess { result ->
@@ -341,25 +310,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun updatePreferredColor(color: OrbColor?) {
-        preferredColor = color
-        getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE).edit().apply {
-            if (color == null) remove(PREFERRED_COLOR_KEY) else putString(PREFERRED_COLOR_KEY, color.name)
-        }.apply()
-    }
-
-    private fun updateTargetComboCount(target: Int?) {
-        targetComboCount = target
-        getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE).edit().apply {
-            if (target == null) remove(TARGET_COMBO_COUNT_KEY) else putInt(TARGET_COMBO_COUNT_KEY, target)
-        }.apply()
-    }
-
-    private fun updateMatchPatternFocus(pattern: MatchPattern?) {
-        matchPatternFocus = pattern
-        getSharedPreferences(SOLVER_PREFERENCES, MODE_PRIVATE).edit().apply {
-            if (pattern == null) remove(MATCH_PATTERN_KEY) else putString(MATCH_PATTERN_KEY, pattern.name)
-        }.apply()
+    private fun updateSolveSettings(settings: SolveSettings) {
+        solveSettings = settings
+        settingsStore.save(settings)
     }
 
     private fun showSolutionInPad(result: BoardSolution) {
@@ -428,10 +381,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val SOLVER_LOG_TAG = "PadSolverSearch"
-        const val SOLVER_PREFERENCES = "solver_preferences"
-        const val PREFERRED_COLOR_KEY = "preferred_orb_color"
-        const val TARGET_COMBO_COUNT_KEY = "target_combo_count"
-        const val MATCH_PATTERN_KEY = "match_pattern"
     }
 }
 

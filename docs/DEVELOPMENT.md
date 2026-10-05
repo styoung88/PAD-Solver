@@ -15,6 +15,7 @@ A request to merge a feature branch also authorizes cleaning it up. Commit and p
 - Android test screenshots and other fixtures belong in `app/src/androidTest/assets`.
 - Instrumentation tests use `androidTestImplementation` dependencies. Gradle packages instrumentation tests and their assets in a separate test APK; a normal `assembleDebug` app APK does not contain them.
 - Build the installable app with `./gradlew :app:assembleDebug` (Windows: `.\gradlew.bat :app:assembleDebug`). Run JVM tests with `./gradlew :app:testDebugUnitTest`; run device/emulator instrumentation tests with `./gradlew :app:connectedDebugAndroidTest`.
+- After device instrumentation tests, run `scripts/install-debug-to-device.ps1` again and verify the app is installed. Test-runner cleanup can remove the app from the phone.
 
 ## Install a debug build on a connected Android device (Windows)
 

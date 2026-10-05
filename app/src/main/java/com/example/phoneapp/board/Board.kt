@@ -7,7 +7,13 @@ enum class OrbColor {
     LIGHT,
     DARK,
     HEART,
-    UNKNOWN,
+    UNKNOWN;
+
+    val isAttacking: Boolean get() = this in attackingColors
+
+    companion object {
+        val attackingColors: List<OrbColor> = listOf(FIRE, WATER, WOOD, LIGHT, DARK)
+    }
 }
 
 /** Properties that can be added without multiplying the set of orb colors. */

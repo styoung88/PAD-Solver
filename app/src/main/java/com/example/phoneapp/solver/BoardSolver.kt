@@ -43,7 +43,7 @@ object MaximizeCombos : SolveGoal {
 /** Board-only estimate for a mono-color team: orb-count factor × total combo factor. */
 data class MaximizeColorDamage(val color: OrbColor) : SolveGoal {
     init {
-        require(color in ATTACK_COLORS) { "A damage focus must use an attacking orb color." }
+        require(color.isAttacking) { "A damage focus must use an attacking orb color." }
     }
 
     override val preferredColor: OrbColor get() = color
@@ -54,10 +54,6 @@ data class MaximizeColorDamage(val color: OrbColor) : SolveGoal {
             primaryScore = ColorDamageEstimate.scoreRelativeDamage(analysis, color),
             secondaryScore = analysis.comboCount,
         )
-
-    private companion object {
-        val ATTACK_COLORS = setOf(OrbColor.FIRE, OrbColor.WATER, OrbColor.WOOD, OrbColor.LIGHT, OrbColor.DARK)
-    }
 }
 
 /** Prefer routes that activate the selected match formation. */
@@ -91,7 +87,7 @@ data class TargetComboCount(
 ) : SolveGoal {
     init {
         require(target > 0)
-        require(color == null || color in ATTACK_COLORS) {
+        require(color == null || color.isAttacking) {
             "A damage focus must use an attacking orb color."
         }
     }
@@ -125,10 +121,6 @@ data class TargetComboCount(
     }
 
     override fun patternPotential(board: Board): Int = pattern?.potentialScore(board, color) ?: 0
-
-    private companion object {
-        val ATTACK_COLORS = setOf(OrbColor.FIRE, OrbColor.WATER, OrbColor.WOOD, OrbColor.LIGHT, OrbColor.DARK)
-    }
 }
 
 /**
