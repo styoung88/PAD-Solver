@@ -20,7 +20,7 @@ object RouteArrowRenderer {
     private const val OUTLINE_COLOR = 0xE817202B.toInt()
     private const val START_BADGE_COLOR = 0xFF4CAF50.toInt()
     private const val END_BADGE_COLOR = 0xFFEF4444.toInt()
-    private const val GRADIENT_SPEED_MULTIPLIER = 1.5f
+    private const val GRADIENT_SPEED_MULTIPLIER = 2f
     private const val CURVE_TIGHTNESS = 0.14f
 
     /** Geometry prepared once per path and reused by preview and overlay draws. */
@@ -74,14 +74,14 @@ object RouteArrowRenderer {
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = OUTLINE_COLOR
             style = Paint.Style.STROKE
-            strokeWidth = maxOf(3f * density, cellSize * 0.11f)
+            strokeWidth = maxOf(3f * density, cellSize * 0.0825f)
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
         val routePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = ROUTE_COLOR
             style = Paint.Style.STROKE
-            strokeWidth = maxOf(2f * density, cellSize * 0.055f)
+            strokeWidth = maxOf(2f * density, cellSize * 0.04125f)
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
