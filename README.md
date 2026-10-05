@@ -47,4 +47,4 @@ See [Development workflow](docs/DEVELOPMENT.md) for build, test, and device-inst
 
 ## Git
 
-Start each feature from an up-to-date `main` branch. Use Conventional Commit messages. When a feature is complete, commit it and push and merge it before starting the next feature. Do not commit `local.properties`, build outputs, or signing credentials.
+Start each feature by creating a dedicated branch from an up-to-date `main`, using the `codex/` prefix unless another name is requested. Use Conventional Commit messages. When a feature is complete, commit it and push and merge it before starting the next feature. A request to merge includes cleanup: after pushing the merge to `main`, delete the fully merged feature branch locally and on the remote, then finish on `main`. Preserve uncommitted work. Do not commit `local.properties`, build outputs, or signing credentials.

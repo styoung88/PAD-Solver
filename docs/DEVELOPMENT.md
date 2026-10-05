@@ -1,5 +1,13 @@
 # Development workflow
 
+## Feature branches and merge cleanup
+
+Use Conventional Commits for all commit messages: `<type>[optional scope]: <description>`. Common types include `feat`, `fix`, `docs`, `refactor`, `test`, `build`, and `chore`. See `../CONTRIBUTING.md` for examples.
+
+Before starting each new feature, update `main` and create a dedicated feature branch. Use a descriptive name with the `codex/` prefix unless the user specifies another name. Keep related changes on the existing feature branch.
+
+A request to merge a feature branch also authorizes cleaning it up. Commit and push the completed changes, merge into `main`, and push `main`. After confirming the changes are safely merged and pushed, delete the feature branch locally and on the remote, finish on `main`, and report the result. Preserve uncommitted work throughout this process.
+
 ## Build and test source sets
 
 - App code belongs in `app/src/main`. It is compiled into the installable app APK.
