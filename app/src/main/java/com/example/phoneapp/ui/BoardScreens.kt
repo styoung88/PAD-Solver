@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
@@ -41,6 +42,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -146,8 +149,7 @@ fun BoardPreviewScreen(
                     if (isSolving) SolveProgressIndicator("Finding a route…")
                 }
                 BoardCaption("Review board", "Check the detected 6×5 layout")
-                OrbBoard(board = recognition.board)
-                CapturedBoardBottomSpacing(recognition)
+                CapturedOrbBoard(recognition = recognition)
             }
         }
     }
@@ -336,8 +338,7 @@ fun SolutionScreen(
                 if (unmetRequirements.isEmpty()) "Suggested route" else "Captured board",
                 if (unmetRequirements.isEmpty()) "Start at green, end at red" else "Adjust settings to try another route",
             )
-            OrbBoard(board = board, path = if (unmetRequirements.isEmpty()) solution.path else emptyList())
-            CapturedBoardBottomSpacing(recognition)
+            CapturedOrbBoard(recognition, if (unmetRequirements.isEmpty()) solution.path else emptyList())
         }
     }
 }
@@ -382,16 +383,34 @@ private fun BoardCaption(title: String, hint: String) {
     }
 }
 @Composable
-private fun CapturedBoardBottomSpacing(recognition: BoardRecognition.Recognized) {
-    // Scale the screenshot's bottom margin by the same factor as the full-width grid.
-    val bottomMarginFraction =
-        (recognition.captureHeight - recognition.boardBounds.bottom).coerceAtLeast(0f) /
-            recognition.captureWidth.coerceAtLeast(1)
+private fun CapturedOrbBoard(
+    recognition: BoardRecognition.Recognized,
+    path: List<BoardPosition> = emptyList(),
+) {
+    val density = LocalDensity.current
+    val windowHeight = LocalWindowInfo.current.containerSize.height
+    val navigationBarHeight = WindowInsets.navigationBars.getBottom(density)
+    // Match the working overlay: its window excludes the bottom navigation bar,
+    // and screenshot Y coordinates are scaled into that usable window height.
+    val overlayHeight = (windowHeight - navigationBarHeight).coerceAtLeast(1)
+    val scaleY = overlayHeight.toFloat() / recognition.captureHeight.coerceAtLeast(1)
+    val boardHeight = with(density) { (recognition.boardBounds.height() * scaleY).toDp() }
+    val bottomGap = with(density) {
+        (navigationBarHeight +
+            (recognition.captureHeight - recognition.boardBounds.bottom).coerceAtLeast(0f) * scaleY).toDp()
+    }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        Spacer(Modifier.height(maxWidth * bottomMarginFraction))
+        val previewAspectRatio = maxWidth.value / boardHeight.value.coerceAtLeast(1f)
+        Column {
+            OrbBoard(
+                board = recognition.board,
+                path = path,
+                boardAspectRatio = previewAspectRatio,
+            )
+            Spacer(Modifier.height(bottomGap))
+        }
     }
 }
-
 @Composable
 private fun SolveProgressIndicator(message: String) {
     Row(
@@ -540,12 +559,13 @@ fun OrbBoard(
     board: Board,
     path: List<BoardPosition> = emptyList(),
     modifier: Modifier = Modifier,
+    boardAspectRatio: Float = board.columns.toFloat() / board.rows.toFloat(),
 ) {
     val preparedRoute = remember(path, board.columns, board.rows) {
         if (path.isEmpty()) null else RouteArrowRenderer.prepareRoute(path, board.columns, board.rows)
     }
     Canvas(
-        modifier = modifier.fillMaxWidth().aspectRatio(board.columns.toFloat() / board.rows.toFloat())
+        modifier = modifier.fillMaxWidth().aspectRatio(boardAspectRatio)
             .background(Color(0xFF202631), MaterialTheme.shapes.medium),
     ) {
         val cellWidth = size.width / board.columns
