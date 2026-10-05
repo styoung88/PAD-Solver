@@ -22,6 +22,15 @@ object RouteArrowRenderer {
     private const val GRADIENT_SPEED_MULTIPLIER = 1.5f
     private const val CURVE_TIGHTNESS = 0.14f
 
+    /** Geometry prepared once per path and reused by preview and overlay draws. */
+    class PreparedRoute internal constructor(internal val anchors: List<Pair<Float, Float>>)
+
+    fun prepareRoute(path: List<BoardPosition>, columns: Int, rows: Int): PreparedRoute {
+        require(columns > 0 && rows > 0)
+        val centerline = path.map { position -> (position.column + 0.5f) to (position.row + 0.5f) }
+        return PreparedRoute(separateOverlappingRuns(centerline, 1f))
+    }
+
     fun draw(
         canvas: Canvas,
         path: List<BoardPosition>,
@@ -30,6 +39,7 @@ object RouteArrowRenderer {
         rows: Int,
         density: Float,
         endpointCenters: Pair<Pair<Float, Float>, Pair<Float, Float>>? = null,
+        preparedRoute: PreparedRoute? = null,
     ) {
         if (path.isEmpty() || columns <= 0 || rows <= 0) return
         val cellWidth = bounds.width() / columns
@@ -39,29 +49,17 @@ object RouteArrowRenderer {
             (bounds.left + (position.column + 0.5f) * cellWidth) to
                 (bounds.top + (position.row + 0.5f) * cellHeight)
         }
-        val cellVisitCounts = mutableMapOf<Int, Int>()
-        val cellAnchors = mutableMapOf<Int, MutableList<Pair<Float, Float>>>()
-        val routeAnchors = mutableListOf<Pair<Float, Float>>()
-        val priorSegments = mutableListOf<Pair<Pair<Float, Float>, Pair<Float, Float>>>()
-        path.forEachIndexed { index, position ->
-            val cell = position.row * columns + position.column
-            val visitOrdinal = cellVisitCounts.getOrDefault(cell, 0)
-            cellVisitCounts[cell] = visitOrdinal + 1
-            val center = routePoints[index]
-            val priorAnchors = cellAnchors.getOrPut(cell) { mutableListOf() }
-            val anchor = if (visitOrdinal == 0) {
-                center
-            } else {
-                val previous = routeAnchors.lastOrNull() ?: center
-                val next = routePoints.getOrNull(index + 1) ?: center
-                revisitCandidates(center, cellSize).maxBy { candidate ->
-                    revisitAnchorScore(candidate, center, previous, next, priorAnchors, priorSegments, cellSize)
-                }
+        // Keep the solver's route as the canonical trace first. Then detect
+        // collisions between non-adjacent portions of that trace and move a
+        // later overlapping run into the clearest nearby lane. Shared anchor
+        // offsets keep each adjusted run joined to the rest of the route.
+        val routeAnchors = preparedRoute
+            ?.takeIf { it.anchors.size == routePoints.size }
+            ?.anchors
+            ?.map { (column, row) ->
+                (bounds.left + column * cellWidth) to (bounds.top + row * cellHeight)
             }
-            routeAnchors += anchor
-            priorAnchors += anchor
-            if (index > 0) priorSegments += routeAnchors[index - 1] to anchor
-        }
+            ?: separateOverlappingRuns(routePoints, cellSize)
 
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = OUTLINE_COLOR
@@ -182,79 +180,90 @@ object RouteArrowRenderer {
         return control1 to control2
     }
 
-    private fun revisitCandidates(center: Pair<Float, Float>, cellSize: Float): List<Pair<Float, Float>> = buildList {
-        val diagonal = 0.70710677f
-        val directions = listOf(
-            -1f to 0f, -diagonal to -diagonal, 0f to -1f, diagonal to -diagonal,
-            1f to 0f, diagonal to diagonal, 0f to 1f, -diagonal to diagonal,
-        )
-        for (radius in listOf(0.19f, 0.29f)) {
-            directions.forEach { (x, y) -> add((center.first + x * cellSize * radius) to (center.second + y * cellSize * radius)) }
-        }
-    }
+    private data class RouteSample(val segmentIndex: Int, val point: Pair<Float, Float>)
 
-    private fun revisitAnchorScore(
-        candidate: Pair<Float, Float>,
-        center: Pair<Float, Float>,
-        previous: Pair<Float, Float>,
-        next: Pair<Float, Float>,
-        priorAnchors: List<Pair<Float, Float>>,
-        priorSegments: List<Pair<Pair<Float, Float>, Pair<Float, Float>>>,
+    /**
+     * Builds a center-to-center trace, detects close non-adjacent portions, and
+     * nudges later portions sideways. Offsets are shared across anchor points
+     * so the final spline remains a single continuous route.
+     */
+    private fun separateOverlappingRuns(
+        centerline: List<Pair<Float, Float>>,
         cellSize: Float,
-    ): Float {
-        var score = -hypot(candidate.first - center.first, candidate.second - center.second) / cellSize * 0.12f
-        priorAnchors.forEach { anchor ->
-            val separation = hypot(candidate.first - anchor.first, candidate.second - anchor.second) / cellSize
-            score += separation.coerceAtMost(0.6f) * 1.5f
+    ): List<Pair<Float, Float>> {
+        if (centerline.size < 4) return centerline
+
+        val segmentOffsets = MutableList(centerline.lastIndex) { 0f to 0f }
+        val earlierSamples = mutableListOf<RouteSample>()
+        val collisionDistance = cellSize * 0.19f
+        val candidateLanes = floatArrayOf(-0.29f, -0.18f, 0.18f, 0.29f)
+
+        for (segmentIndex in 0 until centerline.lastIndex) {
+            val (control1, control2) = curveControls(centerline, segmentIndex)
+            val start = centerline[segmentIndex]
+            val end = centerline[segmentIndex + 1]
+            val trace = sampleCurve(start, control1, control2, end)
+            val prior = earlierSamples.filter { it.segmentIndex < segmentIndex - 1 }
+
+            if (prior.isNotEmpty() && minimumClearance(trace, prior) < collisionDistance) {
+                val (dx, dy) = cubicTangent(start, control1, control2, end, 0.5f)
+                val tangentLength = hypot(dx, dy).coerceAtLeast(1f)
+                val normalX = -dy / tangentLength
+                val normalY = dx / tangentLength
+                var bestOffset = 0f to 0f
+                var bestClearance = minimumClearance(trace, prior)
+
+                for (lane in candidateLanes) {
+                    val offset = (normalX * cellSize * lane) to (normalY * cellSize * lane)
+                    val shiftedTrace = trace.map { (x, y) -> (x + offset.first) to (y + offset.second) }
+                    val clearance = minimumClearance(shiftedTrace, prior)
+                    if (clearance > bestClearance + cellSize * 0.015f) {
+                        bestClearance = clearance
+                        bestOffset = offset
+                    }
+                }
+                segmentOffsets[segmentIndex] = bestOffset
+            }
+
+            val offset = segmentOffsets[segmentIndex]
+            sampleCurve(start, control1, control2, end).forEach { (x, y) ->
+                earlierSamples += RouteSample(segmentIndex, (x + offset.first) to (y + offset.second))
+            }
         }
 
-        // Favor a lane with breathing room from the already-drawn route. A
-        // strong penalty discourages crossing or retracing earlier segments.
-        priorSegments.dropLast(1).forEach { (start, end) ->
-            val clearance = segmentDistance(previous, candidate, start, end) / cellSize
-            score += clearance.coerceAtMost(0.45f) * 0.5f
-            if (clearance < 0.13f) score -= 10f
+        // Average neighboring segment lanes at shared vertices. This blends a
+        // lane transition across turns while keeping the path topologically
+        // connected. Keep the trace endpoints pinned to the orb centers.
+        return centerline.indices.map { index ->
+            if (index == 0 || index == centerline.lastIndex) return@map centerline[index]
+            val incoming = segmentOffsets.getOrNull(index - 1) ?: (0f to 0f)
+            val outgoing = segmentOffsets.getOrNull(index) ?: (0f to 0f)
+            (centerline[index].first + (incoming.first + outgoing.first) * 0.5f) to
+                (centerline[index].second + (incoming.second + outgoing.second) * 0.5f)
         }
-
-        val inX = candidate.first - previous.first
-        val inY = candidate.second - previous.second
-        val outX = next.first - candidate.first
-        val outY = next.second - candidate.second
-        val inLength = hypot(inX, inY).coerceAtLeast(1f)
-        val outLength = hypot(outX, outY).coerceAtLeast(1f)
-        score += ((inX * outX + inY * outY) / (inLength * outLength)) * 0.18f
-        return score
     }
 
-    private fun segmentDistance(
-        a: Pair<Float, Float>,
-        b: Pair<Float, Float>,
-        c: Pair<Float, Float>,
-        d: Pair<Float, Float>,
+    private fun sampleCurve(
+        start: Pair<Float, Float>,
+        control1: Pair<Float, Float>,
+        control2: Pair<Float, Float>,
+        end: Pair<Float, Float>,
+    ): List<Pair<Float, Float>> = (1..9).map { sample ->
+        cubicPoint(start, control1, control2, end, sample / 10f)
+    }
+
+    private fun minimumClearance(
+        current: List<Pair<Float, Float>>,
+        previous: List<RouteSample>,
     ): Float {
-        fun cross(p: Pair<Float, Float>, q: Pair<Float, Float>, r: Pair<Float, Float>) =
-            (q.first - p.first) * (r.second - p.second) - (q.second - p.second) * (r.first - p.first)
-        val abC = cross(a, b, c)
-        val abD = cross(a, b, d)
-        val cdA = cross(c, d, a)
-        val cdB = cross(c, d, b)
-        val boundsOverlap = maxOf(minOf(a.first, b.first), minOf(c.first, d.first)) <=
-            minOf(maxOf(a.first, b.first), maxOf(c.first, d.first)) &&
-            maxOf(minOf(a.second, b.second), minOf(c.second, d.second)) <=
-            minOf(maxOf(a.second, b.second), maxOf(c.second, d.second))
-        if (boundsOverlap && abC * abD <= 0f && cdA * cdB <= 0f) return 0f
-
-        fun pointDistance(point: Pair<Float, Float>, start: Pair<Float, Float>, end: Pair<Float, Float>): Float {
-            val dx = end.first - start.first
-            val dy = end.second - start.second
-            val lengthSquared = dx * dx + dy * dy
-            if (lengthSquared <= 0f) return hypot(point.first - start.first, point.second - start.second)
-            val projection = (((point.first - start.first) * dx + (point.second - start.second) * dy) / lengthSquared)
-                .coerceIn(0f, 1f)
-            return hypot(point.first - (start.first + projection * dx), point.second - (start.second + projection * dy))
+        if (current.isEmpty() || previous.isEmpty()) return Float.MAX_VALUE
+        var clearance = Float.MAX_VALUE
+        for ((x, y) in current) {
+            for (sample in previous) {
+                clearance = minOf(clearance, hypot(x - sample.point.first, y - sample.point.second))
+            }
         }
-
-        return minOf(pointDistance(a, c, d), pointDistance(b, c, d), pointDistance(c, a, b), pointDistance(d, a, b))
+        return clearance
     }
 
     private fun cubicPoint(

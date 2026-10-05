@@ -114,12 +114,18 @@ class SolutionOverlayService : Service() {
         private val captureWidth: Int,
         private val captureHeight: Int,
     ) : View(context) {
+        private val positions = path.map { index ->
+            BoardPosition(index / Board.DEFAULT_COLUMNS, index % Board.DEFAULT_COLUMNS)
+        }
+        private val preparedRoute = RouteArrowRenderer.prepareRoute(
+            positions,
+            Board.DEFAULT_COLUMNS,
+            Board.DEFAULT_ROWS,
+        )
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             if (path.isEmpty()) return
-            val positions = path.map { index ->
-                BoardPosition(index / Board.DEFAULT_COLUMNS, index % Board.DEFAULT_COLUMNS)
-            }
             val scaleX = width.toFloat() / captureWidth
             val scaleY = height.toFloat() / captureHeight
             // Preserve the overlay coordinates from before arrow rendering
@@ -141,6 +147,7 @@ class SolutionOverlayService : Service() {
                 rows = Board.DEFAULT_ROWS,
                 density = resources.displayMetrics.density,
                 endpointCenters = points.first() to points.last(),
+                preparedRoute = preparedRoute,
             )
         }
     }

@@ -6,8 +6,10 @@ import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.content.pm.PackageManager
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -56,6 +58,7 @@ class MainActivity : ComponentActivity() {
     private var matchPatternFocus by mutableStateOf<MatchPattern?>(null)
     private var isReadingCapture by mutableStateOf(false)
     private var isSolving by mutableStateOf(false)
+    private var solveRunId = 0
     private var pendingRoutePermission = false
 
     private val overlayPermissionLauncher = registerForActivityResult(
@@ -227,23 +230,40 @@ class MainActivity : ComponentActivity() {
         pattern: MatchPattern? = this.matchPatternFocus,
     ) {
         val board = (recognition as? BoardRecognition.Recognized)?.board ?: return
+        if (isSolving) return
         isSolving = true
         lifecycleScope.launch {
+            val runId = ++solveRunId
+            val startedAt = SystemClock.elapsedRealtime()
             val goal = when {
                 targetComboCount != null -> TargetComboCount(targetComboCount, color, pattern)
                 pattern != null -> MaximizeMatchPattern(pattern, color)
                 color != null -> MaximizeColorDamage(color)
                 else -> MaximizeCombos
             }
+            Log.i(
+                SOLVER_LOG_TAG,
+                "solve[$runId] start color=$color targetCombos=$targetComboCount pattern=$pattern",
+            )
             runCatching { BoardSolver().solve(board, SolveOptions(goal = goal)) }
                 .onSuccess { result ->
+                    Log.i(
+                        SOLVER_LOG_TAG,
+                        "solve[$runId] complete elapsedMs=${SystemClock.elapsedRealtime() - startedAt} " +
+                            "satisfied=${result.goalSatisfied} moves=${result.orbMoves} combos=${result.comboCount}",
+                    )
                     solution = result
                     if (!result.goalSatisfied) {
                         stopService(Intent(this@MainActivity, SolutionOverlayService::class.java)
                             .setAction(SolutionOverlayService.ACTION_HIDE))
                     }
                 }
-                .onFailure {
+                .onFailure { error ->
+                    Log.e(
+                        SOLVER_LOG_TAG,
+                        "solve[$runId] failed elapsedMs=${SystemClock.elapsedRealtime() - startedAt}",
+                        error,
+                    )
                     Toast.makeText(this@MainActivity, "Could not find a route. Please try again.", Toast.LENGTH_LONG).show()
                 }
             isSolving = false
@@ -321,6 +341,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
+        const val SOLVER_LOG_TAG = "PadSolverSearch"
         const val SOLVER_PREFERENCES = "solver_preferences"
         const val PREFERRED_COLOR_KEY = "preferred_orb_color"
         const val TARGET_COMBO_COUNT_KEY = "target_combo_count"

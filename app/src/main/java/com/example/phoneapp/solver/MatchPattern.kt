@@ -25,6 +25,13 @@ enum class MatchPattern(val displayName: String) {
      * This is a beam-search heuristic only; it does not make a route satisfy the goal.
      */
     fun potentialScore(board: Board, color: OrbColor? = null): Int {
+        // TPA is the common expensive case when no color is selected: the
+        // beam search evaluates every route candidate, and the generic shape
+        // path below allocates collections for each of the 36 line templates
+        // and each attacking color. Score those straight four-cell windows
+        // directly from cached cell indices instead.
+        if (this == TPA) return tpaPotentialScore(board, color)
+
         // Each pattern has different geometry even when board dimensions match.
         val key = Triple(this, board.columns, board.rows)
         val shapes = templateCache.computeIfAbsent(key) { templates(board.columns, board.rows) }
@@ -48,6 +55,105 @@ enum class MatchPattern(val displayName: String) {
                 )
                 val alignmentBonus = alignmentBonus(shape, matchingPositions.toSet())
                 val score = coverage * COVERAGE_WEIGHT + alignmentBonus - distance
+                if (coverage > bestCoverage || coverage == bestCoverage && score > bestScore) {
+                    bestCoverage = coverage
+                    bestScore = score
+                }
+            }
+        }
+        return bestScore
+    }
+
+    private fun tpaPotentialScore(board: Board, color: OrbColor?): Int {
+        val columns = board.columns
+        val rows = board.rows
+        val windows = tpaTemplateCache.computeIfAbsent(columns to rows) {
+            buildList {
+                for (row in 0 until rows) for (left in 0..(columns - 4)) {
+                    val start = row * columns + left
+                    add(intArrayOf(start, start + 1, start + 2, start + 3))
+                }
+                for (column in 0 until columns) for (top in 0..(rows - 4)) {
+                    val start = top * columns + column
+                    add(intArrayOf(start, start + columns, start + 2 * columns, start + 3 * columns))
+                }
+            }
+        }
+
+        val selectedColors = if (color == null) ATTACK_COLORS else listOf(color)
+        val colorCells = Array(OrbColor.entries.size) { IntArray(board.orbs.size) }
+        val colorCounts = IntArray(OrbColor.entries.size)
+        val colorAtCell = IntArray(board.orbs.size)
+        board.orbs.forEachIndexed { index, orb ->
+            val colorOrdinal = orb.color.ordinal
+            colorAtCell[index] = colorOrdinal
+            colorCells[colorOrdinal][colorCounts[colorOrdinal]++] = index
+        }
+
+        val missingCells = IntArray(4)
+        val surplusCells = IntArray(board.orbs.size)
+        var bestCoverage = -1
+        var bestScore = 0
+        for (window in windows) {
+            for (candidateColor in selectedColors) {
+                val colorOrdinal = candidateColor.ordinal
+                var coverage = 0
+                var run = 0
+                var longestRun = 0
+                var missingCount = 0
+                for (cell in window) {
+                    if (colorAtCell[cell] == colorOrdinal) {
+                        coverage++
+                        run++
+                        longestRun = maxOf(longestRun, run)
+                    } else {
+                        run = 0
+                        missingCells[missingCount++] = cell
+                    }
+                }
+                if (coverage < bestCoverage) continue
+
+                // Match missing slots to the nearest surplus orbs, preserving
+                // the prior greedy Manhattan-distance heuristic without
+                // allocating lists, sets, or BoardPosition values per window.
+                var surplusCount = 0
+                val cellsOfColor = colorCells[colorOrdinal]
+                for (colorIndex in 0 until colorCounts[colorOrdinal]) {
+                    val cell = cellsOfColor[colorIndex]
+                    if (window.none { it == cell }) surplusCells[surplusCount++] = cell
+                }
+                var distance = 0
+                var remainingMissing = missingCount
+                var remainingSurplus = surplusCount
+                while (remainingMissing > 0 && remainingSurplus > 0) {
+                    var closestMissing = 0
+                    var closestSurplus = 0
+                    var closestDistance = Int.MAX_VALUE
+                    for (missingIndex in 0 until remainingMissing) {
+                        val missing = missingCells[missingIndex]
+                        for (surplusIndex in 0 until remainingSurplus) {
+                            val surplus = surplusCells[surplusIndex]
+                            val candidateDistance = kotlin.math.abs(missing / columns - surplus / columns) +
+                                kotlin.math.abs(missing % columns - surplus % columns)
+                            if (candidateDistance < closestDistance) {
+                                closestDistance = candidateDistance
+                                closestMissing = missingIndex
+                                closestSurplus = surplusIndex
+                            }
+                        }
+                    }
+                    distance += closestDistance
+                    for (index in closestMissing until remainingMissing - 1) {
+                        missingCells[index] = missingCells[index + 1]
+                    }
+                    for (index in closestSurplus until remainingSurplus - 1) {
+                        surplusCells[index] = surplusCells[index + 1]
+                    }
+                    remainingMissing--
+                    remainingSurplus--
+                }
+
+                val score = coverage * COVERAGE_WEIGHT + longestRun * STRAIGHT_RUN_BONUS - distance
                 if (coverage > bestCoverage || coverage == bestCoverage && score > bestScore) {
                     bestCoverage = coverage
                     bestScore = score
@@ -308,6 +414,7 @@ enum class MatchPattern(val displayName: String) {
             OrbColor.DARK,
         )
         val templateCache = ConcurrentHashMap<Triple<MatchPattern, Int, Int>, List<Set<BoardPosition>>>()
+        val tpaTemplateCache = ConcurrentHashMap<Pair<Int, Int>, List<IntArray>>()
         val lArmTemplateCache = ConcurrentHashMap<Set<BoardPosition>, List<Pair<List<BoardPosition>, List<BoardPosition>>>>()
         const val COVERAGE_WEIGHT = 100
         const val STRAIGHT_RUN_BONUS = 8

@@ -555,6 +555,9 @@ fun OrbBoard(
     path: List<BoardPosition> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
+    val preparedRoute = remember(path, board.columns, board.rows) {
+        if (path.isEmpty()) null else RouteArrowRenderer.prepareRoute(path, board.columns, board.rows)
+    }
     Canvas(
         modifier = modifier.fillMaxWidth().aspectRatio(board.columns.toFloat() / board.rows.toFloat())
             .background(Color(0xFF202631), MaterialTheme.shapes.medium).padding(4.dp),
@@ -595,6 +598,7 @@ fun OrbBoard(
                 columns = board.columns,
                 rows = board.rows,
                 density = density,
+                preparedRoute = preparedRoute,
             )
         }
     }
