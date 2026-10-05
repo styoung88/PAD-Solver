@@ -334,7 +334,7 @@ fun SolutionScreen(
             }
             BoardCaption(
                 if (unmetRequirements.isEmpty()) "Suggested route" else "Captured board",
-                if (unmetRequirements.isEmpty()) "Start at red, end at green" else "Adjust settings to try another route",
+                if (unmetRequirements.isEmpty()) "Start at green, end at red" else "Adjust settings to try another route",
             )
             OrbBoard(board = board, path = if (unmetRequirements.isEmpty()) solution.path else emptyList())
             CapturedBoardBottomSpacing(recognition)
