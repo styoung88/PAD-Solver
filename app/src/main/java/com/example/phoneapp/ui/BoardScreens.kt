@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -128,15 +129,13 @@ fun BoardPreviewScreen(
             onApply = { onSolve(preferredColor, targetComboCount, matchPatternFocus) },
         ) { openSettings ->
             Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.Bottom,
             ) {
             Text("Review board", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
-            Text("Check the detected 6×5 layout before solving. Editing is not available yet.")
-            Spacer(Modifier.height(12.dp))
-            OrbBoard(board = recognition.board)
+            Text("Check the detected 6×5 layout before solving. Editing is not available yet.", modifier = Modifier.padding(horizontal = 20.dp))
             Spacer(Modifier.height(12.dp))
             SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
             Spacer(Modifier.height(12.dp))
@@ -145,6 +144,9 @@ fun BoardPreviewScreen(
                 Spacer(Modifier.height(12.dp))
             }
             OutlinedButton(onClick = onNewBoard, enabled = !isSolving) { Text("New board") }
+            Spacer(Modifier.height(20.dp))
+            OrbBoard(board = recognition.board)
+            CapturedBoardBottomSpacing(recognition)
             }
         }
     }
@@ -270,6 +272,7 @@ private fun DrawerEdgeIndicator(modifier: Modifier, onClick: () -> Unit) {
 @Composable
 fun SolutionScreen(
     board: Board,
+    recognition: BoardRecognition.Recognized,
     solution: BoardSolution,
     preferredColor: OrbColor?,
     targetComboCount: Int?,
@@ -306,9 +309,9 @@ fun SolutionScreen(
         }
         Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(top = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.Bottom,
     ) {
         if (unmetRequirements.isNotEmpty()) {
             Text("Criteria not met", style = MaterialTheme.typography.headlineSmall)
@@ -322,12 +325,11 @@ fun SolutionScreen(
                     }
                     append(".")
                 },
+                modifier = Modifier.padding(horizontal = 20.dp),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(16.dp))
-            OrbBoard(board = board)
-            Spacer(Modifier.height(18.dp))
             SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
             if (isSolving) {
                 Spacer(Modifier.height(12.dp))
@@ -335,7 +337,21 @@ fun SolutionScreen(
             }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onNewBoard) { Text("New board") }
+            Spacer(Modifier.height(20.dp))
+            OrbBoard(board = board)
         } else {
+            SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
+            if (isSolving) {
+                Spacer(Modifier.height(12.dp))
+                SolveProgressIndicator("Recalculating route…")
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onShowInGame, enabled = !isSolving) { Text("Show route in PAD") }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onNewBoard) { Text("New board") }
+            Spacer(Modifier.height(20.dp))
+            Text("Start at S and follow the arrows to E.")
+            Spacer(Modifier.height(12.dp))
             Text("Suggested route", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(6.dp))
             val cascadeCount = solution.predictedMatches.cascadeCount
@@ -352,32 +368,25 @@ fun SolutionScreen(
             val focusedPatternSummary = solution.matchPatternFocus?.let { pattern ->
                 " · ${solution.focusedPatternMatchCount ?: 0} ${solution.preferredColor?.let { "${orbColorName(it)} " }.orEmpty()}${pattern.displayName} matches"
             }.orEmpty()
-            Text("${solution.comboCount} combos$focusedColorSummary$focusedPatternSummary · ${solution.orbMoves} orb moves$cascadeSummary")
-            solution.targetComboCount?.let { target ->
-                Spacer(Modifier.height(4.dp))
-                Text(
-                "Minimum: $target combos reached",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
+            Text("${solution.comboCount} combos$focusedColorSummary$focusedPatternSummary · ${solution.orbMoves} orb moves$cascadeSummary", modifier = Modifier.padding(horizontal = 20.dp))
+
             Spacer(Modifier.height(16.dp))
             OrbBoard(board = board, path = solution.path)
-            Spacer(Modifier.height(12.dp))
-            Text("Start at S and follow the arrows to E.")
-            Spacer(Modifier.height(18.dp))
-            SettingsDrawerTrigger(onClick = openSettings, enabled = !isSolving)
-            if (isSolving) {
-                Spacer(Modifier.height(12.dp))
-                SolveProgressIndicator("Recalculating route…")
-            }
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = onShowInGame, enabled = !isSolving) { Text("Show route in PAD") }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onNewBoard) { Text("New board") }
         }
+        CapturedBoardBottomSpacing(recognition)
     }
 }
+}
+
+@Composable
+private fun CapturedBoardBottomSpacing(recognition: BoardRecognition.Recognized) {
+    // Scale the screenshot's bottom margin by the same factor as the full-width grid.
+    val bottomMarginFraction =
+        (recognition.captureHeight - recognition.boardBounds.bottom).coerceAtLeast(0f) /
+            recognition.captureWidth.coerceAtLeast(1)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        Spacer(Modifier.height(maxWidth * bottomMarginFraction))
+    }
 }
 
 @Composable
@@ -560,13 +569,14 @@ fun OrbBoard(
     }
     Canvas(
         modifier = modifier.fillMaxWidth().aspectRatio(board.columns.toFloat() / board.rows.toFloat())
-            .background(Color(0xFF202631), MaterialTheme.shapes.medium).padding(4.dp),
+            .background(Color(0xFF202631), MaterialTheme.shapes.medium),
     ) {
         val cellWidth = size.width / board.columns
         val cellHeight = size.height / board.rows
         val native = drawContext.canvas.nativeCanvas
         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        val radius = minOf(cellWidth, cellHeight) * 0.38f
+        // PAD's round orbs nearly fill each cell, with a narrow gap between neighbors.
+        val radius = minOf(cellWidth, cellHeight) * 0.47f
 
         for (row in 0 until board.rows) {
             for (column in 0 until board.columns) {

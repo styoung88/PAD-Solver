@@ -10,6 +10,8 @@
 
 ## Install a debug build on a connected Android device (Windows)
 
+Always build and install updated debug builds on the user's connected phone after changes that affect the app. Routine device updates are authorized without another confirmation. Report installation success, or explain if the phone is disconnected or unauthorized. If multiple physical devices are connected, ask which phone to use.
+
 Use `scripts/install-debug-to-device.ps1`. For example:
 
 ```powershell
