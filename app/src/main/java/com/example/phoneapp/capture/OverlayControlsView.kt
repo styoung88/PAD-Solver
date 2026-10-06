@@ -28,8 +28,7 @@ internal class OverlayControlsView(
     private var positionLocked = initiallyLocked
     private val accent = 0xFF66DFCA.toInt()
     private val status: TextView
-    private val shortcutStatus: TextView
-    private val capture: TextView
+    private val capture: View
     private val settings: TextView
     private val panelPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         color = 0x80111827.toInt()
@@ -44,7 +43,7 @@ internal class OverlayControlsView(
         elevation = resources.dpToPx(8).toFloat()
         val header = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(TextView(context).apply {
-            text = "PAD SOLVER"
+            text = "PAD"
             gravity = Gravity.CENTER_VERTICAL
             textSize = 11f
             letterSpacing = 0.12f
@@ -97,14 +96,20 @@ internal class OverlayControlsView(
             textSize = 12f
             setPadding(0, 0, 0, 0)
             background = RippleDrawable(ColorStateList.valueOf(0x30FFFFFF), rounded(0xFF273246.toInt(), 9), null)
-            contentDescription = "Close overlay and stop sharing"
+            contentDescription = "Close overlay"
         }, LayoutParams(resources.dpToPx(22), resources.dpToPx(22)))
         addView(header, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
         val actions = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
-        capture = button("Capture", accent, 0xFF102822.toInt(), onCapture)
-        settings = button("Settings", 0xFF2D394D.toInt(), Color.WHITE, onSettings).apply {
-            contentDescription = "Adjust solve settings for the latest capture"
+        capture = CaptureIconView(context).apply {
+            background = RippleDrawable(ColorStateList.valueOf(0x30FFFFFF), rounded(accent, 12), null)
+            contentDescription = "Capture board"
+            isFocusable = true
+            setOnClickListener { onCapture() }
+        }
+        settings = button("⚙", 0xFF2D394D.toInt(), Color.WHITE, onSettings).apply {
+            textSize = 24f
+            contentDescription = "Open solve settings"
         }
         actions.addView(capture, LayoutParams(0, resources.dpToPx(44), 1f).apply { marginEnd = resources.dpToPx(8) })
         actions.addView(settings, LayoutParams(0, resources.dpToPx(44), 1f))
@@ -116,28 +121,20 @@ internal class OverlayControlsView(
             maxLines = 3
             accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
         }
-        addView(status, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = resources.dpToPx(10) })
-        shortcutStatus = TextView(context).apply {
-            textSize = 11f
-            setTextColor(0xFFF1F5F9.toInt())
-            accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
-        }
-        addView(shortcutStatus, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = resources.dpToPx(6) })
-        layoutParams = LayoutParams(resources.dpToPx(260), LayoutParams.WRAP_CONTENT)
-        minimumWidth = resources.dpToPx(260)
+        addView(status, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = resources.dpToPx(8) })
+        status.visibility = GONE
+        layoutParams = LayoutParams(resources.dpToPx(176), LayoutParams.WRAP_CONTENT)
+        minimumWidth = resources.dpToPx(176)
     }
 
     fun setStatus(message: String, isError: Boolean = false, busy: Boolean = false) {
         status.text = message
+        status.visibility = if (message.isBlank()) GONE else VISIBLE
         status.setTextColor(if (isError) 0xFFFF8585.toInt() else 0xFFF1F5F9.toInt())
         capture.isEnabled = !busy
         capture.alpha = if (busy) 0.45f else 1f
         settings.isEnabled = true
         settings.alpha = 1f
-    }
-
-    fun setShortcutStatus(message: String) {
-        if (shortcutStatus.text != message) shortcutStatus.text = message
     }
 
     override fun dispatchDraw(canvas: android.graphics.Canvas) {
@@ -165,6 +162,30 @@ internal class OverlayControlsView(
         setColor(fill)
         cornerRadius = resources.dpToPx(radius).toFloat()
         stroke?.let { setStroke(resources.dpToPx(1), it) }
+    }
+
+    private class CaptureIconView(context: Context) : View(context) {
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF102822.toInt()
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = resources.displayMetrics.density * 1.8f
+            strokeCap = android.graphics.Paint.Cap.ROUND
+        }
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            super.onDraw(canvas)
+            val unit = resources.displayMetrics.density
+            canvas.save()
+            canvas.translate(width / 2f - 12 * unit, height / 2f - 12 * unit)
+            canvas.scale(unit, unit)
+            paint.strokeWidth = 1.8f
+            canvas.drawRoundRect(2f, 6f, 22f, 20f, 2f, 2f, paint)
+            canvas.drawLine(7f, 6f, 9f, 3f, paint)
+            canvas.drawLine(9f, 3f, 15f, 3f, paint)
+            canvas.drawLine(15f, 3f, 17f, 6f, paint)
+            canvas.drawCircle(12f, 13f, 4f, paint)
+            canvas.restore()
+        }
     }
 
     private class LockIconView(context: Context) : View(context) {

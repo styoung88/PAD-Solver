@@ -40,6 +40,10 @@ class PhotoPermissionSystemTest {
 
     @After fun cleanUp() {
         device.pressBack()
+        repeat(2) {
+            val foreground = device.currentPackageName.orEmpty()
+            if (foreground.contains("permissioncontroller") || foreground.contains("photopicker") || foreground.contains("providers.media")) device.pressBack()
+        }
         resetProbePermissions()
     }
 
@@ -78,9 +82,15 @@ class PhotoPermissionSystemTest {
         repeat(2) {
             requestAccess()
             if (Build.VERSION.SDK_INT >= 34) {
-                assertTrue("After Don't select more, Android opens photo reselection", device.wait(
-                    Until.hasObject(By.pkg(Pattern.compile(".*(photopicker|providers\\.media).*"))), timeout,
-                ))
+                val deadline = android.os.SystemClock.uptimeMillis() + timeout
+                val pickerPackage = Pattern.compile(".*(photopicker|providers\\.media|permissioncontroller).*")
+                var reselection = false
+                while (!reselection && android.os.SystemClock.uptimeMillis() < deadline) {
+                    reselection = device.hasObject(By.desc("Photos").pkg(pickerPackage)) ||
+                        device.hasObject(By.text("Photos").pkg(pickerPackage))
+                    if (!reselection) android.os.SystemClock.sleep(100)
+                }
+                assertTrue("After Don't select more, Android opens photo reselection", reselection)
                 assertFalse("Reselection must not be mistaken for the original Allow all prompt", device.hasObject(allow))
                 device.pressBack()
                 assertEquals(PackageManager.PERMISSION_GRANTED, grant(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED))
@@ -115,7 +125,10 @@ class PhotoPermissionSystemTest {
         awaitObject(By.text("Request photo access"))
     }
 
-    private fun requestAccess() { awaitObject(By.text("Request photo access")).click() }
+    private fun requestAccess() {
+        assertTrue("The permission probe must accept the request", awaitObject(By.text("Request photo access"))
+            .accessibilityNodeInfo.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+    }
 
     private fun awaitObject(selector: BySelector): UiObject2 =
         checkNotNull(device.wait(Until.findObject(selector), timeout)) { "Missing system UI: $selector" }

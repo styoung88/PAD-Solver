@@ -3,12 +3,20 @@ package com.example.phoneapp.capture
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import android.app.Service
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.os.Build
 import android.os.IBinder
+import android.net.Uri
+import android.provider.Settings
+import androidx.core.app.NotificationCompat
+import com.example.phoneapp.R
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -25,16 +33,17 @@ import com.example.phoneapp.util.parcelableExtra
 class SolutionOverlayService : Service() {
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
     private var solveJob: kotlinx.coroutines.Job? = null
-    private var latestCapturePath: String? = null
+    private var latestCaptureUri: Uri? = null
+    private var screenshotReadJob: kotlinx.coroutines.Job? = null
+    private var capturePending = false
     private val toolbarPreferences by lazy { getSharedPreferences("overlay_toolbar", MODE_PRIVATE) }
     private val settingsStore by lazy { SolveSettingsStore(this) }
     private val screenshotShortcut by lazy { ScreenshotShortcut(this) }
+    private val screenshots by lazy { ScreenshotSource(contentResolver) }
     private var screenshotObserverRegistered = false
     private var toolbarLayoutParams: WindowManager.LayoutParams? = null
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val startedAt = System.currentTimeMillis() / 1000
-    private var lastScreenshotId = -1L
     private val screenshotObserver = object : android.database.ContentObserver(handler) {
         override fun onChange(selfChange: Boolean) {
             handler.removeCallbacks(checkScreenshots)
@@ -43,30 +52,30 @@ class SolutionOverlayService : Service() {
     }
     private val checkScreenshots = Runnable {
         refreshScreenshotShortcut()
-        if (!enabled || !ScreenCaptureService.active || !screenshotShortcut.canWatch(PhotoAccess.current(this))) return@Runnable
-        runCatching {
-            val uri = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            val columns = arrayOf("_id", "_display_name", "date_added")
-            contentResolver.query(uri, columns, "date_added >= ?", arrayOf(startedAt.toString()), "_id DESC")?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val id = cursor.getLong(0)
-                    val name = cursor.getString(1).orEmpty()
-                    if (id > lastScreenshotId && name.contains("screenshot", ignoreCase = true)) {
-                        lastScreenshotId = id
-                        requestCapture()
-                    }
-                }
+        if (!enabled || !screenshotShortcut.canWatch(PhotoAccess.current(this))) return@Runnable
+        screenshotReadJob?.cancel()
+        screenshotReadJob = scope.launch {
+            try {
+                val image = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { screenshots.next() }
+                if (image != null && screenshotShortcut.canWatch(PhotoAccess.current(this@SolutionOverlayService))) solveImage(image)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                refreshScreenshotShortcut()
+                toolbarView?.setStatus("Couldn't read the screenshot. Try Capture.", isError = true)
+                android.util.Log.w("RouteOverlay", "Screenshot observation unavailable", error)
             }
-        }.onFailure {
-            refreshScreenshotShortcut()
-            toolbarView?.setShortcutStatus("Screenshots unavailable. Tap Capture instead.")
-            android.util.Log.w("RouteOverlay", "Screenshot observation unavailable", it)
         }
     }
 
     private val refreshShortcut = object : Runnable {
         override fun run() {
             refreshScreenshotShortcut()
+            if ((toolbarView != null || routeView != null) && !Settings.canDrawOverlays(this@SolutionOverlayService)) {
+                stopService(Intent(this@SolutionOverlayService, ScreenCaptureService::class.java))
+                stopSelf()
+                return
+            }
             handler.postDelayed(this, 5000)
         }
     }
@@ -76,29 +85,34 @@ class SolutionOverlayService : Service() {
         val canWatch = screenshotShortcut.canWatch(access)
         if (canWatch && !screenshotObserverRegistered) {
             screenshotObserverRegistered = runCatching {
+                // Only watch screenshots taken after enabling this overlay session.
+                screenshots.startSession()
                 contentResolver.registerContentObserver(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, screenshotObserver)
             }.isSuccess
         } else if (!canWatch && screenshotObserverRegistered) {
             contentResolver.unregisterContentObserver(screenshotObserver)
             screenshotObserverRegistered = false
             handler.removeCallbacks(checkScreenshots)
+            screenshotReadJob?.cancel()
         }
-        toolbarView?.setShortcutStatus(when {
-            !screenshotShortcut.enabled -> "Screenshots disabled. Tap Capture instead."
-            access != PhotoAccess.FULL -> "Screenshots need access to all photos. Tap Capture instead."
-            !screenshotObserverRegistered -> "Screenshots unavailable. Tap Capture instead."
-            else -> "Screenshots enabled"
-        })
     }
 
     override fun onCreate() {
         super.onCreate()
         enabled = true
+        startAsForeground()
         handler.post(refreshShortcut)
     }
 
     private fun requestCapture() {
-        startService(Intent(this, ScreenCaptureService::class.java).setAction(ScreenCaptureService.ACTION_CAPTURE_NOW))
+        if (ScreenCaptureService.active) {
+            startService(Intent(this, ScreenCaptureService::class.java).setAction(ScreenCaptureService.ACTION_CAPTURE_NOW))
+        } else {
+            startActivity(Intent(this, MainActivity::class.java).apply {
+                putExtra(EXTRA_REQUEST_CAPTURE, true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            })
+        }
     }
 
     private fun clearRoute() {
@@ -108,16 +122,23 @@ class SolutionOverlayService : Service() {
     }
 
     private fun solveCapture(path: String) {
+        solveImage(Uri.fromFile(java.io.File(path)))
+    }
+
+    private fun solveImage(uri: Uri) {
         clearRoute()
-        latestCapturePath = path
+        capturePending = false
+        latestCaptureUri = uri
 
         toolbarView?.visibility = View.VISIBLE
         toolbarView?.setStatus("Reading board…", busy = true)
         solveJob = scope.launch {
             try {
-                val recognized = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                    val bitmap = android.graphics.BitmapFactory.decodeFile(path) ?: return@withContext null
-                    try { PadBoardRecognizer().recognize(bitmap) as? BoardRecognition.Recognized }
+                val recognized = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val bitmap = BoardImageLoader.read(this@SolutionOverlayService, uri) ?: return@withContext null
+                    try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        PadBoardRecognizer().recognize(bitmap) as? BoardRecognition.Recognized
+                    } }
                     finally { bitmap.recycle() }
                 }
                 if (recognized == null) {
@@ -158,24 +179,36 @@ class SolutionOverlayService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_CAPTURE_FAILED -> {
-
+                capturePending = false
                 toolbarView?.visibility = View.VISIBLE
                 toolbarView?.setStatus("Capture failed. Tap Capture to retry.", isError = true)
+                return START_NOT_STICKY
+            }
+            ACTION_CAPTURE_STOPPED -> {
+                // Preserve screenshot solving and existing routes when projection ends.
+                toolbarView?.visibility = View.VISIBLE
+                if (capturePending) {
+                    capturePending = false
+                    toolbarView?.setStatus("Capture stopped. Tap Capture to try again.", isError = true)
+                }
                 return START_NOT_STICKY
             }
             ACTION_PROCESSING -> {
 
                 clearRoute()
-                latestCapturePath = null
+                latestCaptureUri = null
+                capturePending = true
                 toolbarView?.visibility = View.INVISIBLE
                 return START_NOT_STICKY
             }
             ACTION_SOLVE_CAPTURE -> {
+                capturePending = false
                 intent.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(::solveCapture)
                 return START_NOT_STICKY
             }
         }
         if (intent?.action == ACTION_HIDE) {
+            stopService(Intent(this, ScreenCaptureService::class.java))
             stopSelf()
             return START_NOT_STICKY
         }
@@ -250,12 +283,12 @@ class SolutionOverlayService : Service() {
                 toolbarLayoutParams?.let { toolbarPreferences.edit().putInt("x", it.x).putInt("y", it.y).apply() }
             },
         ).apply {
-            setStatus(if (routeView == null) "Ready for a new board" else "Route ready")
+            setStatus("")
         }
         toolbarView = toolbar
         refreshScreenshotShortcut()
         val toolbarParams = WindowManager.LayoutParams(
-            resources.dpToPx(260),
+            resources.dpToPx(176),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
@@ -263,7 +296,7 @@ class SolutionOverlayService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.END
             alpha = 1f
-            x = toolbarPreferences.getInt("x", resources.dpToPx(8)).coerceIn(0, (resources.displayMetrics.widthPixels - resources.dpToPx(260)).coerceAtLeast(0))
+            x = toolbarPreferences.getInt("x", resources.dpToPx(8)).coerceIn(0, (resources.displayMetrics.widthPixels - resources.dpToPx(176)).coerceAtLeast(0))
             y = toolbarPreferences.getInt("y", resources.dpToPx(48)).coerceIn(0, (resources.displayMetrics.heightPixels - resources.dpToPx(180)).coerceAtLeast(0))
         }
         toolbarLayoutParams = toolbarParams
@@ -272,7 +305,10 @@ class SolutionOverlayService : Service() {
 
     private fun openLatestCapture() {
         startActivity(Intent(this, MainActivity::class.java).apply {
-            latestCapturePath?.let { putExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH, it) }
+            latestCaptureUri?.let { uri ->
+                if (uri.scheme == "file") putExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH, uri.path)
+                else data = uri
+            }
             putExtra(EXTRA_OPEN_SETTINGS, true)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         })
@@ -290,10 +326,30 @@ class SolutionOverlayService : Service() {
         routeView = null
         toolbarView?.let { runCatching { windowManager?.removeView(it) } }
         toolbarView = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun startAsForeground() {
+        val channel = "pad_overlay"
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(
+            NotificationChannel(channel, "PAD floating toolbar", NotificationManager.IMPORTANCE_LOW),
+        )
+        val close = PendingIntent.getService(this, 43,
+            Intent(this, SolutionOverlayService::class.java).setAction(ACTION_HIDE),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification = NotificationCompat.Builder(this, channel)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("PAD floating toolbar")
+            .setContentText("Ready to process your screenshots or capture a board.")
+            .setOngoing(true)
+            .addAction(R.drawable.ic_notification, "Close overlay", close)
+            .build()
+        if (Build.VERSION.SDK_INT >= 34) startForeground(43, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        else startForeground(43, notification)
+    }
 
     private class RouteOverlayView(
         context: android.content.Context,
@@ -347,6 +403,8 @@ class SolutionOverlayService : Service() {
         const val ACTION_ENABLE = "com.example.phoneapp.action.ENABLE_OVERLAY"
         const val ACTION_REFRESH_SHORTCUT = "com.example.phoneapp.action.REFRESH_SCREENSHOT_SHORTCUT"
         const val ACTION_CAPTURE_FAILED = "com.example.phoneapp.action.CAPTURE_FAILED"
+        const val ACTION_CAPTURE_STOPPED = "com.example.phoneapp.action.CAPTURE_STOPPED"
+        const val EXTRA_REQUEST_CAPTURE = "request_screen_capture"
         const val ACTION_SOLVE_CAPTURE = "com.example.phoneapp.action.SOLVE_CAPTURE"
         const val ACTION_SHOW = "com.example.phoneapp.action.SHOW_ROUTE"
         const val ACTION_HIDE = "com.example.phoneapp.action.HIDE_ROUTE"

@@ -37,9 +37,12 @@ class ScreenCaptureService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_CAPTURE_NOW -> captureCurrentFrame()
+            ACTION_CAPTURE_NOW -> if (projection != null) captureCurrentFrame() else stopSelf()
             ACTION_STOP -> stopSelf()
-            ACTION_START -> startProjection(intent)
+            ACTION_START -> runCatching { startProjection(intent) }.onFailure {
+                android.util.Log.e("PadCapture", "Could not start screen capture", it)
+                failStart(intent)
+            }
             else -> stopSelf()
         }
         return START_NOT_STICKY
@@ -51,7 +54,7 @@ class ScreenCaptureService : Service() {
         val resultData = intent.parcelableExtra<Intent>(EXTRA_RESULT_DATA)
         val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
         if (resultData == null || resultCode == 0) {
-            stopSelf()
+            failStart(intent)
             return
         }
 
@@ -64,7 +67,7 @@ class ScreenCaptureService : Service() {
         val height = metrics.heightPixels
         val density = metrics.densityDpi
         if (width <= 0 || height <= 0) {
-            stopSelf()
+            failStart(intent)
             return
         }
 
@@ -92,6 +95,12 @@ class ScreenCaptureService : Service() {
         )
         active = virtualDisplay != null
         intent.parcelableExtra<android.os.ResultReceiver>(EXTRA_READY_RECEIVER)?.send(if (active) 1 else 0, null)
+        if (!active) stopSelf()
+    }
+
+    private fun failStart(intent: Intent) {
+        intent.parcelableExtra<android.os.ResultReceiver>(EXTRA_READY_RECEIVER)?.send(0, null)
+        stopSelf()
     }
 
     private fun onImageAvailable(reader: ImageReader) {
@@ -194,7 +203,7 @@ class ScreenCaptureService : Service() {
             description = "Visible while the app is capturing a PAD board by request."
         }
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
-        val notification = makeNotification("Use Capture in the PAD overlay, or take a phone screenshot.")
+        val notification = makeNotification("Tap Capture in the PAD overlay to read your board.")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
         } else {
@@ -203,6 +212,7 @@ class ScreenCaptureService : Service() {
     }
 
     private fun updateNotification(message: String) {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, makeNotification(message))
     }
@@ -229,7 +239,9 @@ class ScreenCaptureService : Service() {
         active = false
         captureRequest.cancel()
         mainHandler.removeCallbacksAndMessages(null)
-        stopService(Intent(this, SolutionOverlayService::class.java))
+        if (SolutionOverlayService.enabled) {
+            startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_CAPTURE_STOPPED))
+        }
         virtualDisplay?.release()
         virtualDisplay = null
         imageReader?.close()

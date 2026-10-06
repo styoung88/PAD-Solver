@@ -24,6 +24,13 @@ class ScreenshotShortcutTest {
 
     @After fun cleanUp() { preferences.edit().clear().commit() }
 
+    @Test fun freshInstallRequiresAnExplicitOptInWithoutRequestingPermissions() {
+        preferences.edit().clear().commit()
+        assertFalse(ScreenshotShortcut(context).enabled)
+        assertFalse(ScreenshotShortcut(context).photoAccessRequested)
+        assertFalse(ScreenshotShortcut(context).canWatch(PhotoAccess.NONE))
+    }
+
     @Test fun losingFullAccessImmediatelyDisablesWatchingWithoutCachingTheGrant() {
         val shortcut = ScreenshotShortcut(context)
         shortcut.enabled = true

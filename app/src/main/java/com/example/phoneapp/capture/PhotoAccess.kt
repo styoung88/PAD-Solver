@@ -56,12 +56,12 @@ internal enum class PhotoAccess {
     }
 }
 
-internal class ScreenshotShortcut(context: Context) {
+internal class ScreenshotShortcut(private val context: Context) {
     private val preferences = context.getSharedPreferences("capture_preferences", Context.MODE_PRIVATE)
 
-    // Retain the shortcut for existing users who already granted full access.
+    // Fresh installs opt in explicitly; preserve existing full-access users and saved choices.
     var enabled: Boolean
-        get() = preferences.getBoolean("screenshot_shortcut", true)
+        get() = preferences.getBoolean("screenshot_shortcut", PhotoAccess.current(context) == PhotoAccess.FULL)
         set(value) { preferences.edit { putBoolean("screenshot_shortcut", value) } }
 
     var photoAccessRequested: Boolean

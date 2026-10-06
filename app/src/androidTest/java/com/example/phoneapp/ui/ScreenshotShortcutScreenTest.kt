@@ -109,11 +109,11 @@ class ScreenshotShortcutScreenTest {
         compose.setContent { MaterialTheme {
             HomeScreen({}, {}, enabled.value, PhotoAccess.FULL, { enabled.value = it }, {})
         } }
-        compose.onNodeWithText("Take a screenshot while the overlay is open to capture and solve your board.")
+        compose.onNodeWithText("Take a screenshot while the overlay is open to solve your board.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Manage photo access").assertDoesNotExist()
         compose.onNodeWithContentDescription("Enable screenshots").performScrollTo().performClick()
-        compose.onNodeWithText("Use Capture in the overlay, or choose a saved screenshot.").assertIsDisplayed()
+        compose.onNodeWithText("Use Capture in the overlay, or choose a saved screenshot.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Manage photo access").assertDoesNotExist()
     }
 }

@@ -20,9 +20,10 @@ Follow `AGENTS.md` for branches, commits, merges, and authorized phone updates.
 
 ## Regression decisions
 
-- Photo library access is optional: only the screenshot shortcut requires full access. Recheck grants before watching; selected-only or denied access must leave direct capture and the picker usable. Backup/transfer allowlists retain only solve preferences, excluding captures and phone-specific settings.
+- Request no access on launch. The picker needs no broad photo access; showing the toolbar/route needs overlay access; only Capture starts projection consent. Notifications must not block either service. New installs explicitly enable screenshots; full-access legacy users retain their choice.
+- Automatic screenshots read the saved image, independently of projection, only while the overlay is open. Recheck grants before watching; limited/denied access leaves Capture and the picker usable. The overlay has its own foreground service; stopping sharing keeps it usable. Backup/transfer retains solve preferences only.
 - Selected photo access can reopen reselection without an Allow all choice. Explain Settings for selected access or blocked denial; otherwise request permission. Use App info with a best-effort Permissions highlight; direct permission pages require system privileges. Hide permission controls with full access.
 - Test legal routes and independently checked results, not one exact path or a global optimum; the solver uses bounded search.
 - Capture must use a fresh reader to discard overlay frames, including on static boards. Do not compare image timestamps with system clocks; their time bases can differ.
-- Real projection consent/revocation, hardware acquisition/timeouts, and disk-full writes still need phone checks. For capture changes: deny and retry, capture a static board twice, stop while pending, confirm overlays close and stale routes stay cleared, then restart sharing.
+- Capture changes need phone checks: deny and retry, capture a static board twice, stop while pending, confirm the toolbar remains usable and stale routes stay cleared, then restart sharing. Hardware timeouts and disk-full writes still need device checks.
 - CI job names and configuration live in `.github/workflows/android.yml`; use its downloadable artifacts to diagnose failures. Never skip failing tests to make checks pass.

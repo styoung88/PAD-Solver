@@ -20,7 +20,7 @@ class CaptureServiceLifecycleTest {
     }
 
     @Test
-    fun stopSharingAlsoStopsOverlayAndCancelsPendingSolve() {
+    fun stopSharingKeepsTheIndependentOverlayAvailable() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 activity.startService(Intent(activity, SolutionOverlayService::class.java)
@@ -35,7 +35,8 @@ class CaptureServiceLifecycleTest {
                 activity.startService(Intent(activity, ScreenCaptureService::class.java)
                     .setAction(ScreenCaptureService.ACTION_STOP))
             }
-            awaitOverlay(false)
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            awaitOverlay(true)
             assertFalse(ScreenCaptureService.active)
         }
     }
