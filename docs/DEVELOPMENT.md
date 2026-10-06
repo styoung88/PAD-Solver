@@ -29,6 +29,8 @@ After the first successful workflow run, repository branch protection can requir
 
 GitHub currently rejects branch-protection and ruleset requests for this private repository with HTTP 403: "Upgrade to GitHub Pro or make this repository public to enable this feature." Keep the repository private unless its owner explicitly requests otherwise. Once the account supports private-repository protection, require all three checks on `main`, require the branch to be up to date, and apply the checks to administrators too.
 
+The emulator jobs remove unused preinstalled Android NDKs from their disposable runners to leave room for Gradle caches and system images. The app does not compile native source. The AVD's data partition is explicitly set to 2 GB before boot; replacing the existing configuration entry avoids a duplicate key preserving the oversized default. Boot failures time out after five minutes and print available disk space in the logs.
+
 ## Regression coverage
 
 Keep pure board and solver tests in `app/src/test` so they run without Android. These cover matched group boundaries, simultaneous clears, gravity and cascades, enhanced-orb accounting, pattern geometry/color filters, goal evaluation, search bounds, route replay, and cancellation. The screenshot-derived combo/pattern regression also runs locally. Check route legality and resulting matches rather than requiring a particular path when multiple routes are valid; the bounded search does not guarantee a global optimum.

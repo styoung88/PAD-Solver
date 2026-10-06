@@ -62,6 +62,9 @@ jobs:
         api-level: [26, 36]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Free unused Android NDKs on the hosted runner
+        # This app uses prebuilt libraries and does not compile native code.
+        run: sudo rm -rf /usr/local/lib/android/sdk/ndk
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -89,8 +92,11 @@ jobs:
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
-          # Leave room for SDKs and Gradle caches on the hosted runner.
-          disk-size: 2048M
+          # Replace the default entry instead of appending a duplicate AVD key.
+          pre-emulator-launch-script: |
+            sed -i 's/^disk.dataPartition.size=.*/disk.dataPartition.size=2048M/' "$ANDROID_AVD_HOME/test.avd/config.ini"
+            df -h "$ANDROID_AVD_HOME"
+          emulator-boot-timeout: 300
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: bash ./gradlew --no-daemon --build-cache :app:connectedDebugAndroidTest
