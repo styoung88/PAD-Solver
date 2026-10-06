@@ -158,7 +158,7 @@ class PermissionFlowTest {
         val selector = if (clickable) hasText(text) and hasClickAction() else hasText(text)
         try {
             compose.waitUntil(timeoutMillis = timeoutMillis) {
-                compose.onAllNodes(selector).fetchSemanticsNodes().isNotEmpty()
+                compose.onAllNodes(selector).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
             }
         } catch (error: androidx.compose.ui.test.ComposeTimeoutException) {
             throw AssertionError("Missing app UI: $text\n${compose.onRoot().printToString()}", error)

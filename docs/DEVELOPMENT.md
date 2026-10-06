@@ -27,3 +27,4 @@ Follow `AGENTS.md` for branches, commits, merges, and authorized phone updates.
 - Capture must use a fresh reader to discard overlay frames, including on static boards. Do not compare image timestamps with system clocks; their time bases can differ.
 - Capture changes need phone checks: deny and retry, capture a static board twice, stop while pending, confirm the toolbar remains usable and stale routes stay cleared, then restart sharing. Hardware timeouts and disk-full writes still need device checks.
 - CI job names and configuration live in `.github/workflows/android.yml`; use its downloadable artifacts to diagnose failures. Never skip failing tests to make checks pass.
+- After pushing, do not wait for CI to finish; the user will report its result.

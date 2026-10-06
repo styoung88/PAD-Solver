@@ -137,7 +137,7 @@ class SolveSettingsDrawerTest {
 
     private fun waitForText(text: String) {
         compose.waitUntil(timeoutMillis = 30_000) {
-            compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText(text).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         val node = compose.onNodeWithText(text)
         if (text != "Board not clear enough") node.performScrollTo()
