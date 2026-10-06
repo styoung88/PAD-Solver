@@ -11,7 +11,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
-import androidx.test.uiautomator.Until
+import com.example.phoneapp.awaitNativeObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -56,7 +56,7 @@ class PhotoPermissionSystemTest {
     @Test fun freshRequestOffersTheNativeFullAccessChoice() {
         launchProbe()
         requestAccess()
-        assertNotNull("A fresh request must offer Android's allow choice", device.wait(Until.findObject(allow), timeout))
+        assertNotNull("A fresh request must offer Android's allow choice", device.awaitNativeObject(allow, timeout))
         if (Build.VERSION.SDK_INT >= 34) {
             assertNotNull("Android 14+ must also offer selected access", device.findObject(
                 By.res(Pattern.compile(".*:id/permission_allow_selected_button")),
@@ -105,6 +105,7 @@ class PhotoPermissionSystemTest {
                 val pickerPackage = Pattern.compile(".*(photopicker|providers\\.media|permissioncontroller).*")
                 var reselection = false
                 while (!reselection && android.os.SystemClock.uptimeMillis() < deadline) {
+                    instrumentation.uiAutomation.clearCache()
                     reselection = device.hasObject(By.desc("Photos").pkg(pickerPackage)) ||
                         device.hasObject(By.text("Photos").pkg(pickerPackage))
                     if (!reselection) android.os.SystemClock.sleep(100)
@@ -125,7 +126,7 @@ class PhotoPermissionSystemTest {
         val before = grant(permission)
         val settings = PhotoAccess.settingsIntent(probePackage)
         target.startActivity(settings.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        val row = device.wait(Until.findObject(By.text("Permissions")), timeout)
+        val row = device.awaitNativeObject(By.text("Permissions"), timeout)
         assertNotNull("App info must expose the Permissions row", row)
         val label = target.packageManager.getApplicationLabel(target.packageManager.getApplicationInfo(probePackage, 0)).toString()
         assertNotNull("App info must show the requested app's label", device.findObject(By.text(label)))
@@ -150,7 +151,7 @@ class PhotoPermissionSystemTest {
     }
 
     private fun awaitObject(selector: BySelector): UiObject2 =
-        checkNotNull(device.wait(Until.findObject(selector), timeout)) { "Missing system UI: $selector" }
+        checkNotNull(device.awaitNativeObject(selector, timeout)) { "Missing system UI: $selector" }
 
     private fun grant(permission: String) = target.packageManager.checkPermission(permission, probePackage)
 

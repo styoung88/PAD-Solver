@@ -20,7 +20,7 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.Until
+import com.example.phoneapp.awaitNativeObject
 import com.example.phoneapp.MainActivity
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
@@ -78,6 +78,7 @@ class PermissionFlowTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             awaitText("Open PAD overlay")
             awaitText("Choose existing screenshot").assertIsDisplayed()
+            assertNotNull("The app must remain visible without a system permission dialog", device.awaitNativeObject(By.pkg(context.packageName).depth(0), timeout))
             assertEquals(context.packageName, device.currentPackageName)
             assertFalse(ScreenCaptureService.active)
             assertFalse(SolutionOverlayService.enabled)
@@ -90,6 +91,7 @@ class PermissionFlowTest {
             awaitText("Open PAD overlay").performClick()
             awaitText("Show the PAD overlay", scroll = false, clickable = false)
             awaitText("Not now", scroll = false).performClick()
+            assertNotNull("The app must remain visible without a system permission dialog", device.awaitNativeObject(By.pkg(context.packageName).depth(0), timeout))
             assertEquals(context.packageName, device.currentPackageName)
             assertFalse(ScreenCaptureService.active)
             assertFalse(SolutionOverlayService.enabled)
@@ -100,7 +102,7 @@ class PermissionFlowTest {
         setOverlayMode("allow")
         ActivityScenario.launch(MainActivity::class.java).use {
             awaitText("Open PAD overlay").performClick()
-            assertNotNull(device.wait(Until.findObject(By.desc("Capture board")), timeout))
+            assertNotNull(device.awaitNativeObject(By.desc("Capture board"), timeout))
             assertNotNull(device.findObject(By.desc("Open solve settings")))
             assertNotNull(device.findObject(By.desc("Close overlay")))
             assertTrue(SolutionOverlayService.enabled)
@@ -117,12 +119,12 @@ class PermissionFlowTest {
         context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         try {
             awaitText("Open PAD overlay").performClick()
-            checkNotNull(device.wait(Until.findObject(By.desc("Capture board")), timeout)).click()
-            val cancel = device.wait(Until.findObject(By.pkg("com.android.systemui").text(Pattern.compile("(?i)cancel"))), timeout)
+            checkNotNull(device.awaitNativeObject(By.desc("Capture board"), timeout)).click()
+            val cancel = device.awaitNativeObject(By.pkg("com.android.systemui").text(Pattern.compile("(?i)cancel")), timeout)
             assertNotNull("Capture must open Android's sharing consent", cancel)
             assertFalse(ScreenCaptureService.active)
             cancel!!.click()
-            assertNotNull(device.wait(Until.findObject(By.desc("Capture board")), timeout))
+            assertNotNull(device.awaitNativeObject(By.desc("Capture board"), timeout))
             assertTrue(SolutionOverlayService.enabled)
             assertFalse(ScreenCaptureService.active)
         } finally {
@@ -147,7 +149,7 @@ class PermissionFlowTest {
                 awaitText("Apply and solve").performClick()
                 // Software rendering and shared CI CPUs need more time for the real solve.
                 awaitText("Show route in PAD", scroll = false, timeoutMillis = 60_000).performClick()
-                assertNotNull(device.wait(Until.findObject(By.desc("Capture board")), timeout))
+                assertNotNull(device.awaitNativeObject(By.desc("Capture board"), timeout))
                 assertTrue(SolutionOverlayService.enabled)
                 assertFalse(ScreenCaptureService.active)
             }
