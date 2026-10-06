@@ -101,11 +101,14 @@ jobs:
           # Replace the default entry instead of appending a duplicate AVD key.
           pre-emulator-launch-script: |
             sed -i 's/^disk.dataPartition.size=.*/disk.dataPartition.size=2048M/' "$ANDROID_AVD_HOME/test.avd/config.ini"
+            # Android 8 SystemUI crashes on permission dialogs without a navigation bar.
+            sed -i '/^hw\.mainKeys[[:space:]]*=/d' "$ANDROID_AVD_HOME/test.avd/config.ini"
+            printf 'hw.mainKeys=no\n' >> "$ANDROID_AVD_HOME/test.avd/config.ini"
             df -h "$ANDROID_AVD_HOME"
           emulator-boot-timeout: 300
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: bash ./gradlew --no-daemon --build-cache :app:connectedDebugAndroidTest
+          script: bash scripts/run-emulator-tests.sh
       - name: Save device reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
@@ -114,5 +117,6 @@ jobs:
           path: |
             app/build/reports/androidTests/connected/
             app/build/outputs/androidTest-results/connected/
+            app/build/reports/emulator-diagnostics/
           if-no-files-found: warn
           retention-days: 14

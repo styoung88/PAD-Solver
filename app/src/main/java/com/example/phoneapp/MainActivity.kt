@@ -1,13 +1,11 @@
 package com.example.phoneapp
 
 import android.app.Activity
-import android.Manifest
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
-import android.content.pm.PackageManager
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -29,11 +27,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.phoneapp.capture.BoardRecognition
+import com.example.phoneapp.capture.BoardImageLoader
 import com.example.phoneapp.capture.PadBoardRecognizer
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
+import com.example.phoneapp.capture.PhotoAccess
+import com.example.phoneapp.capture.ScreenshotShortcut
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.BoardSolver
 import com.example.phoneapp.solver.SolveOptions
@@ -41,6 +43,8 @@ import com.example.phoneapp.solver.SolveSettings
 import com.example.phoneapp.solver.SolveSettingsStore
 import com.example.phoneapp.ui.BoardPreviewScreen
 import com.example.phoneapp.ui.HomeScreen
+import com.example.phoneapp.ui.PhotoAccessSettingsDialog
+import com.example.phoneapp.ui.OverlayPermissionDialog
 import com.example.phoneapp.ui.SolveSettingsDrawer
 import com.example.phoneapp.ui.SolutionScreen
 import kotlinx.coroutines.Dispatchers
@@ -59,66 +63,64 @@ class MainActivity : ComponentActivity() {
     private var boardLoadJob: kotlinx.coroutines.Job? = null
     private var overlaySettingsRequested by mutableStateOf(false)
     private var pendingRoutePermission = false
-    private var pendingCaptureRoute = false
+    private var pendingCapture = false
     private var pendingOverlayStart = false
-    private val photoPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        if (pendingOverlayStart) startCaptureFlow() else solution?.let(::showSolutionInPad)
+    private val screenshotShortcut by lazy { ScreenshotShortcut(this) }
+    private var screenshotShortcutEnabled by mutableStateOf(false)
+    private var photoAccess by mutableStateOf(PhotoAccess.NONE)
+    private var photoSettingsHelpVisible by mutableStateOf(false)
+    private var overlayHelpVisible by mutableStateOf(false)
+    private val photoPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        refreshPhotoAccess()
     }
-    private var photoPermissionRequested = false
 
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
         if (pendingOverlayStart) {
-            if (Settings.canDrawOverlays(this)) startCaptureFlow()
+            if (Settings.canDrawOverlays(this)) startOverlay()
             else {
                 pendingOverlayStart = false
-                Toast.makeText(this, "Allow draw-over-apps access to open the PAD overlay.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "To use the floating toolbar, allow PAD Solver to appear over other apps.", Toast.LENGTH_LONG).show()
             }
             return@registerForActivityResult
         }
         if (pendingRoutePermission) {
             pendingRoutePermission = false
             if (Settings.canDrawOverlays(this)) solution?.let(::showSolutionInPad)
-            else Toast.makeText(this, "Allow draw-over-apps access to show the route.", Toast.LENGTH_LONG).show()
+            else Toast.makeText(this, "To show your route, allow PAD Solver to appear over other apps.", Toast.LENGTH_LONG).show()
         }
     }
 
     private val screenCaptureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+        if (pendingCapture && SolutionOverlayService.enabled && result.resultCode == Activity.RESULT_OK && result.data != null) {
             val serviceIntent = Intent(this, ScreenCaptureService::class.java).apply {
                 action = ScreenCaptureService.ACTION_START
                 putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, result.resultCode)
                 putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, result.data)
                 putExtra(ScreenCaptureService.EXTRA_READY_RECEIVER, object : android.os.ResultReceiver(android.os.Handler(mainLooper)) {
                     override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                        if (resultCode != 1) return
-                        if (pendingOverlayStart) startCaptureFlow()
-                        else if (pendingCaptureRoute) {
-                            pendingCaptureRoute = false
-                            solution?.let(::showSolutionInPad)
+                        pendingCapture = false
+                        if (resultCode == 1 && SolutionOverlayService.enabled) {
+                            openPad()
+                            android.os.Handler(mainLooper).postDelayed({
+                                if (SolutionOverlayService.enabled) startService(Intent(this@MainActivity, ScreenCaptureService::class.java)
+                                    .setAction(ScreenCaptureService.ACTION_CAPTURE_NOW))
+                            }, 500)
+                        } else {
+                            Toast.makeText(this@MainActivity, "Screen capture couldn't start. Try Capture again.", Toast.LENGTH_LONG).show()
+                            moveTaskToBack(true)
                         }
                     }
                 })
             }
             ContextCompat.startForegroundService(this, serviceIntent)
         } else {
-            pendingOverlayStart = false
-            pendingCaptureRoute = false
+            pendingCapture = false
+            moveTaskToBack(true)
         }
-    }
-
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) launchMediaProjectionConsent()
-        else Toast.makeText(
-            this,
-            "Allow notifications to keep the PAD overlay capture session active.",
-            Toast.LENGTH_LONG,
-        ).show()
     }
 
     private val screenshotPicker = registerForActivityResult(
@@ -127,12 +129,42 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
+        pendingCapture = savedInstanceState?.getBoolean("pending_capture") ?: false
+        pendingOverlayStart = savedInstanceState?.getBoolean("pending_overlay") ?: false
+        pendingRoutePermission = savedInstanceState?.getBoolean("pending_route") ?: false
+        screenshotShortcutEnabled = screenshotShortcut.enabled
+        refreshPhotoAccess()
         solveSettings = settingsStore.load()
         intent.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(::loadCapture)
+        intent.data?.let(::loadCapture)
         overlaySettingsRequested = intent.getBooleanExtra(SolutionOverlayService.EXTRA_OPEN_SETTINGS, false)
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
+                    if (overlayHelpVisible) OverlayPermissionDialog(
+                        onOpenSettings = {
+                            overlayHelpVisible = false
+                            overlayPermissionLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                        },
+                        onDismiss = {
+                            overlayHelpVisible = false
+                            pendingOverlayStart = false
+                            pendingRoutePermission = false
+                        },
+                    )
+                    if (photoSettingsHelpVisible) {
+                        PhotoAccessSettingsDialog(
+                            onOpenSettings = {
+                                photoSettingsHelpVisible = false
+                                openPhotoSettings()
+                            },
+                            onDismiss = { photoSettingsHelpVisible = false },
+                        )
+                    }
                     SolveSettingsDrawer(
                         settings = solveSettings,
                         isSolving = isSolving,
@@ -167,8 +199,13 @@ class MainActivity : ComponentActivity() {
                             )
                             else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 HomeScreen(
-                                    onCapture = ::startCaptureFlow,
+                                    onCapture = ::startOverlay,
                                     onChooseScreenshot = ::chooseExistingScreenshot,
+                                    screenshotShortcutEnabled = screenshotShortcutEnabled,
+                                    photoAccess = photoAccess,
+                                    onScreenshotShortcutChanged = ::updateScreenshotShortcut,
+                                    onManagePhotoAccess = ::managePhotoAccess,
+                                    onOpenSettings = openSettings,
                                 )
                             }
                         }
@@ -178,10 +215,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        handleCaptureRequest()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("pending_capture", pendingCapture)
+        outState.putBoolean("pending_overlay", pendingOverlayStart)
+        outState.putBoolean("pending_route", pendingRoutePermission)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleCaptureRequest()
         intent.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(::loadCapture)
+        intent.data?.let(::loadCapture)
         if (intent.getBooleanExtra(SolutionOverlayService.EXTRA_OPEN_SETTINGS, false)) {
             solveJob?.cancel()
             isSolving = false
@@ -189,24 +240,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startCaptureFlow() {
+    private fun startOverlay() {
         pendingOverlayStart = true
         if (!Settings.canDrawOverlays(this)) {
-            overlayPermissionLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-            return
-        }
-        val photoPermission = if (android.os.Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (!photoPermissionRequested && checkSelfPermission(photoPermission) != PackageManager.PERMISSION_GRANTED) {
-            photoPermissionRequested = true
-            photoPermissionLauncher.launch(photoPermission)
-            return
-        }
-        if (!ScreenCaptureService.active) {
-            requestScreenCapturePermission()
+            overlayHelpVisible = true
             return
         }
         pendingOverlayStart = false
-        startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_ENABLE))
+        ContextCompat.startForegroundService(this, Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_ENABLE))
         openPad()
     }
 
@@ -216,13 +257,49 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun requestScreenCapturePermission() {
-        if (android.os.Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
+    override fun onResume() {
+        super.onResume()
+        refreshPhotoAccess()
+    }
+
+    private fun refreshPhotoAccess() {
+        photoAccess = PhotoAccess.current(this)
+        if (photoAccess == PhotoAccess.FULL) photoSettingsHelpVisible = false
+        if (SolutionOverlayService.enabled) {
+            startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_REFRESH_SHORTCUT))
         }
+    }
+
+    private fun updateScreenshotShortcut(enabled: Boolean) {
+        screenshotShortcut.enabled = enabled
+        screenshotShortcutEnabled = enabled
+        refreshPhotoAccess()
+        if (enabled && photoAccess != PhotoAccess.FULL) {
+            managePhotoAccess()
+        }
+    }
+
+    private fun managePhotoAccess() {
+        refreshPhotoAccess()
+        if (photoAccess == PhotoAccess.FULL) return
+        val permissions = PhotoAccess.requestedPermissions()
+        if (screenshotShortcut.shouldOpenPhotoSettings(photoAccess, shouldShowRequestPermissionRationale(permissions.first()))) {
+            photoSettingsHelpVisible = true
+        } else {
+            screenshotShortcut.photoAccessRequested = true
+            photoPermissionLauncher.launch(permissions)
+        }
+    }
+
+    private fun openPhotoSettings() {
+        startActivity(PhotoAccess.settingsIntent(packageName))
+    }
+
+    private fun handleCaptureRequest() {
+        if (!intent.getBooleanExtra(SolutionOverlayService.EXTRA_REQUEST_CAPTURE, false)) return
+        intent.removeExtra(SolutionOverlayService.EXTRA_REQUEST_CAPTURE)
+        if (pendingCapture || !SolutionOverlayService.enabled) return
+        pendingCapture = true
         launchMediaProjectionConsent()
     }
 
@@ -236,11 +313,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadCapture(uri: Uri) {
-        loadImage {
-            contentResolver.openInputStream(uri)?.use { input ->
-                android.graphics.BitmapFactory.decodeStream(input)
-            }
-        }
+        loadImage { BoardImageLoader.read(this, uri) }
     }
 
     private fun loadImage(decodeBitmap: () -> android.graphics.Bitmap?) {
@@ -319,22 +392,7 @@ class MainActivity : ComponentActivity() {
         val recognized = recognition as? BoardRecognition.Recognized ?: return
         if (!Settings.canDrawOverlays(this)) {
             pendingRoutePermission = true
-            val settingsIntent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName"),
-            )
-            overlayPermissionLauncher.launch(settingsIntent)
-            return
-        }
-        if (!ScreenCaptureService.active) {
-            pendingCaptureRoute = true
-            requestScreenCapturePermission()
-            return
-        }
-        val photoPermission = if (android.os.Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (!photoPermissionRequested && checkSelfPermission(photoPermission) != PackageManager.PERMISSION_GRANTED) {
-            photoPermissionRequested = true
-            photoPermissionLauncher.launch(photoPermission)
+            overlayHelpVisible = true
             return
         }
         val overlayIntent = Intent(this, SolutionOverlayService::class.java).apply {
@@ -344,7 +402,7 @@ class MainActivity : ComponentActivity() {
             putExtra(SolutionOverlayService.EXTRA_CAPTURE_HEIGHT, recognized.captureHeight)
             putExtra(SolutionOverlayService.EXTRA_PATH, result.path.map(recognized.board::indexOf).toIntArray())
         }
-        startService(overlayIntent)
+        ContextCompat.startForegroundService(this, overlayIntent)
 
         openPad()
     }
@@ -354,7 +412,7 @@ class MainActivity : ComponentActivity() {
         if (padIntent != null) {
             startActivity(padIntent)
         } else {
-            Toast.makeText(this, "Route is showing. Switch to Puzzles & Dragons.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Switch to Puzzles & Dragons to use the overlay.", Toast.LENGTH_LONG).show()
             moveTaskToBack(true)
         }
     }

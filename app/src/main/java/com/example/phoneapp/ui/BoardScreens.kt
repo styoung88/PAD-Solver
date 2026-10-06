@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -35,6 +37,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,33 +64,98 @@ import com.example.phoneapp.board.RouteArrowRenderer
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
 import com.example.phoneapp.capture.BoardRecognition
+import com.example.phoneapp.capture.PhotoAccess
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.MatchPattern
 import com.example.phoneapp.solver.SolveSettings
 
 @Composable
-fun HomeScreen(onCapture: () -> Unit, onChooseScreenshot: () -> Unit) {
+internal fun PhotoAccessSettingsDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enable screenshots") },
+        text = {
+            val permission = when {
+                android.os.Build.VERSION.SDK_INT >= 33 -> "Photos and videos"
+                android.os.Build.VERSION.SDK_INT >= 30 -> "Files and media"
+                else -> "Storage"
+            }
+            Text("To detect new screenshots, PAD Solver needs access to all photos. In Settings, tap Permissions, then $permission, and allow access to all photos. You can keep using Capture without changing this.")
+        },
+        confirmButton = { TextButton(onClick = onOpenSettings) { Text("Open Settings") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Keep using Capture") } },
+    )
+}
+
+@Composable
+internal fun OverlayPermissionDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Show the PAD overlay") },
+        text = { Text("Allow PAD Solver to appear over other apps so it can display the floating toolbar and your route. In Settings, turn on Allow display over other apps for PAD Solver, then return here.") },
+        confirmButton = { TextButton(onClick = onOpenSettings) { Text("Open Settings") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+    )
+}
+
+@Composable
+internal fun HomeScreen(
+    onCapture: () -> Unit,
+    onChooseScreenshot: () -> Unit,
+    screenshotShortcutEnabled: Boolean,
+    photoAccess: PhotoAccess,
+    onScreenshotShortcutChanged: (Boolean) -> Unit,
+    onManagePhotoAccess: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("PAD Solver", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "Capture a standard 6×5 board, review the detected orbs, and find a high-combo route.",
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onCapture) { Text("Open PAD overlay") }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onChooseScreenshot) { Text("Choose existing screenshot") }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "Allow screen sharing and draw-over-apps access, then use Capture in the overlay. Full photo access also enables the phone screenshot shortcut.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        SolverAppBar(onOpenSettings, enabled = true)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Find your next route.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+            Text("Solve a 6×5 board and follow the route in PAD.",
+                style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Solve while you play", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Tap Capture in the floating toolbar, or enable screenshots below to solve screenshots you take while playing.")
+                Button(onClick = onCapture, modifier = Modifier.fillMaxWidth()) { Text("Open PAD overlay") }
+                Text("Screen sharing is requested only when you tap Capture.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Card {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Solve a saved board", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Pick a screenshot to review and solve. Show the route in PAD when you’re ready.")
+                OutlinedButton(onClick = onChooseScreenshot, modifier = Modifier.fillMaxWidth()) { Text("Choose existing screenshot") }
+            }
+        }
+        Card {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Enable screenshots", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Switch(checked = screenshotShortcutEnabled, onCheckedChange = onScreenshotShortcutChanged,
+                        modifier = Modifier.semantics { contentDescription = "Enable screenshots" })
+                }
+                Text("Solve new screenshots while the overlay is open. Needs full photo access.",
+                    style = MaterialTheme.typography.bodyMedium)
+                Text(when {
+                    !screenshotShortcutEnabled -> "Use Capture in the overlay, or choose a saved screenshot."
+                    photoAccess == PhotoAccess.FULL -> "Take a screenshot while the overlay is open to solve your board."
+                    photoAccess == PhotoAccess.SELECTED -> "To detect new screenshots, PAD Solver needs access to all photos. You’ve allowed selected photos only. You can still tap Capture."
+                    else -> "Allow access to all photos so PAD Solver can detect new screenshots. Capture works without photo access."
+                }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (screenshotShortcutEnabled && photoAccess != PhotoAccess.FULL) {
+                    TextButton(onClick = onManagePhotoAccess) { Text("Manage photo access") }
+                }
+            }
+        }
     }
 }
 
