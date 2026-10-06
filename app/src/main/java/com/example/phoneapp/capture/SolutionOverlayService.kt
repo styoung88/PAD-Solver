@@ -28,6 +28,8 @@ class SolutionOverlayService : Service() {
     private var latestCapturePath: String? = null
     private val toolbarPreferences by lazy { getSharedPreferences("overlay_toolbar", MODE_PRIVATE) }
     private val settingsStore by lazy { SolveSettingsStore(this) }
+    private val screenshotShortcut by lazy { ScreenshotShortcut(this) }
+    private var screenshotObserverRegistered = false
     private var toolbarLayoutParams: WindowManager.LayoutParams? = null
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -40,7 +42,8 @@ class SolutionOverlayService : Service() {
         }
     }
     private val checkScreenshots = Runnable {
-        if (!enabled || !ScreenCaptureService.active) return@Runnable
+        refreshScreenshotShortcut()
+        if (!enabled || !ScreenCaptureService.active || !screenshotShortcut.canWatch(PhotoAccess.current(this))) return@Runnable
         runCatching {
             val uri = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
             val columns = arrayOf("_id", "_display_name", "date_added")
@@ -54,13 +57,45 @@ class SolutionOverlayService : Service() {
                     }
                 }
             }
-        }.onFailure { android.util.Log.w("RouteOverlay", "Screenshot observation unavailable", it) }
+        }.onFailure {
+            refreshScreenshotShortcut()
+            toolbarView?.setShortcutStatus("Screenshot shortcut unavailable. Use Capture.")
+            android.util.Log.w("RouteOverlay", "Screenshot observation unavailable", it)
+        }
+    }
+
+    private val refreshShortcut = object : Runnable {
+        override fun run() {
+            refreshScreenshotShortcut()
+            handler.postDelayed(this, 5000)
+        }
+    }
+
+    private fun refreshScreenshotShortcut() {
+        val access = PhotoAccess.current(this)
+        val canWatch = screenshotShortcut.canWatch(access)
+        if (canWatch && !screenshotObserverRegistered) {
+            screenshotObserverRegistered = runCatching {
+                contentResolver.registerContentObserver(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, screenshotObserver)
+            }.isSuccess
+        } else if (!canWatch && screenshotObserverRegistered) {
+            contentResolver.unregisterContentObserver(screenshotObserver)
+            screenshotObserverRegistered = false
+            handler.removeCallbacks(checkScreenshots)
+        }
+        toolbarView?.setShortcutStatus(when {
+            !screenshotShortcut.enabled -> "Screenshot shortcut off. Use Capture."
+            access == PhotoAccess.SELECTED -> "Screenshot shortcut paused: selected photos only. Use Capture."
+            access == PhotoAccess.NONE -> "Screenshot shortcut paused: no photo access. Use Capture."
+            !screenshotObserverRegistered -> "Screenshot shortcut unavailable. Use Capture."
+            else -> "Screenshot shortcut active"
+        })
     }
 
     override fun onCreate() {
         super.onCreate()
         enabled = true
-        contentResolver.registerContentObserver(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, screenshotObserver)
+        handler.post(refreshShortcut)
     }
 
     private fun requestCapture() {
@@ -114,6 +149,10 @@ class SolutionOverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            ACTION_REFRESH_SHORTCUT -> {
+                refreshScreenshotShortcut()
+                return START_NOT_STICKY
+            }
             ACTION_ENABLE -> {
                 windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
                 showToolbar()
@@ -215,6 +254,7 @@ class SolutionOverlayService : Service() {
             setStatus(if (routeView == null) "Ready for a new board" else "Route ready")
         }
         toolbarView = toolbar
+        refreshScreenshotShortcut()
         val toolbarParams = WindowManager.LayoutParams(
             resources.dpToPx(260),
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -245,7 +285,7 @@ class SolutionOverlayService : Service() {
     override fun onDestroy() {
         enabled = false
         handler.removeCallbacksAndMessages(null)
-        contentResolver.unregisterContentObserver(screenshotObserver)
+        if (screenshotObserverRegistered) contentResolver.unregisterContentObserver(screenshotObserver)
         scope.cancel()
         routeView?.let { runCatching { windowManager?.removeView(it) } }
         routeView = null
@@ -306,6 +346,7 @@ class SolutionOverlayService : Service() {
             private set
         const val ACTION_PROCESSING = "com.example.phoneapp.action.PROCESSING"
         const val ACTION_ENABLE = "com.example.phoneapp.action.ENABLE_OVERLAY"
+        const val ACTION_REFRESH_SHORTCUT = "com.example.phoneapp.action.REFRESH_SCREENSHOT_SHORTCUT"
         const val ACTION_CAPTURE_FAILED = "com.example.phoneapp.action.CAPTURE_FAILED"
         const val ACTION_SOLVE_CAPTURE = "com.example.phoneapp.action.SOLVE_CAPTURE"
         const val ACTION_SHOW = "com.example.phoneapp.action.SHOW_ROUTE"

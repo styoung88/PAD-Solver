@@ -28,6 +28,7 @@ internal class OverlayControlsView(
     private var positionLocked = initiallyLocked
     private val accent = 0xFF66DFCA.toInt()
     private val status: TextView
+    private val shortcutStatus: TextView
     private val capture: TextView
     private val settings: TextView
     private val panelPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -116,6 +117,12 @@ internal class OverlayControlsView(
             accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
         }
         addView(status, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = resources.dpToPx(10) })
+        shortcutStatus = TextView(context).apply {
+            textSize = 11f
+            setTextColor(0xFFF1F5F9.toInt())
+            accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        addView(shortcutStatus, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = resources.dpToPx(6) })
         layoutParams = LayoutParams(resources.dpToPx(260), LayoutParams.WRAP_CONTENT)
         minimumWidth = resources.dpToPx(260)
     }
@@ -127,6 +134,10 @@ internal class OverlayControlsView(
         capture.alpha = if (busy) 0.45f else 1f
         settings.isEnabled = true
         settings.alpha = 1f
+    }
+
+    fun setShortcutStatus(message: String) {
+        if (shortcutStatus.text != message) shortcutStatus.text = message
     }
 
     override fun dispatchDraw(canvas: android.graphics.Canvas) {

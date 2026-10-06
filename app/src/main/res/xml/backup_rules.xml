@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- An allowlist excludes captures, overlay position, and capture preferences. -->
+    <include domain="sharedpref" path="solver_preferences.xml" />
+</full-backup-content>

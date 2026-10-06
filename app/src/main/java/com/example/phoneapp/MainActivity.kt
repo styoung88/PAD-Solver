@@ -29,11 +29,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.capture.PadBoardRecognizer
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
+import com.example.phoneapp.capture.PhotoAccess
+import com.example.phoneapp.capture.ScreenshotShortcut
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.BoardSolver
 import com.example.phoneapp.solver.SolveOptions
@@ -61,10 +64,12 @@ class MainActivity : ComponentActivity() {
     private var pendingRoutePermission = false
     private var pendingCaptureRoute = false
     private var pendingOverlayStart = false
-    private val photoPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        if (pendingOverlayStart) startCaptureFlow() else solution?.let(::showSolutionInPad)
+    private val screenshotShortcut by lazy { ScreenshotShortcut(this) }
+    private var screenshotShortcutEnabled by mutableStateOf(true)
+    private var photoAccess by mutableStateOf(PhotoAccess.NONE)
+    private val photoPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        refreshPhotoAccess()
     }
-    private var photoPermissionRequested = false
 
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -127,6 +132,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        screenshotShortcutEnabled = screenshotShortcut.enabled
+        refreshPhotoAccess()
         solveSettings = settingsStore.load()
         intent.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(::loadCapture)
         overlaySettingsRequested = intent.getBooleanExtra(SolutionOverlayService.EXTRA_OPEN_SETTINGS, false)
@@ -169,6 +176,13 @@ class MainActivity : ComponentActivity() {
                                 HomeScreen(
                                     onCapture = ::startCaptureFlow,
                                     onChooseScreenshot = ::chooseExistingScreenshot,
+                                    screenshotShortcutEnabled = screenshotShortcutEnabled,
+                                    photoAccess = photoAccess,
+                                    onScreenshotShortcutChanged = ::updateScreenshotShortcut,
+                                    onRequestPhotoAccess = { photoPermissionLauncher.launch(PhotoAccess.requestedPermissions()) },
+                                    onPhotoSettings = {
+                                        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
+                                    },
                                 )
                             }
                         }
@@ -195,12 +209,6 @@ class MainActivity : ComponentActivity() {
             overlayPermissionLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             return
         }
-        val photoPermission = if (android.os.Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (!photoPermissionRequested && checkSelfPermission(photoPermission) != PackageManager.PERMISSION_GRANTED) {
-            photoPermissionRequested = true
-            photoPermissionLauncher.launch(photoPermission)
-            return
-        }
         if (!ScreenCaptureService.active) {
             requestScreenCapturePermission()
             return
@@ -214,6 +222,27 @@ class MainActivity : ComponentActivity() {
         screenshotPicker.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
         )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshPhotoAccess()
+    }
+
+    private fun refreshPhotoAccess() {
+        photoAccess = PhotoAccess.current(this)
+        if (SolutionOverlayService.enabled) {
+            startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_REFRESH_SHORTCUT))
+        }
+    }
+
+    private fun updateScreenshotShortcut(enabled: Boolean) {
+        screenshotShortcut.enabled = enabled
+        screenshotShortcutEnabled = enabled
+        refreshPhotoAccess()
+        if (enabled && photoAccess != PhotoAccess.FULL) {
+            photoPermissionLauncher.launch(PhotoAccess.requestedPermissions())
+        }
     }
 
     private fun requestScreenCapturePermission() {
@@ -329,12 +358,6 @@ class MainActivity : ComponentActivity() {
         if (!ScreenCaptureService.active) {
             pendingCaptureRoute = true
             requestScreenCapturePermission()
-            return
-        }
-        val photoPermission = if (android.os.Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (!photoPermissionRequested && checkSelfPermission(photoPermission) != PackageManager.PERMISSION_GRANTED) {
-            photoPermissionRequested = true
-            photoPermissionLauncher.launch(photoPermission)
             return
         }
         val overlayIntent = Intent(this, SolutionOverlayService::class.java).apply {

@@ -35,6 +35,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,14 +62,23 @@ import com.example.phoneapp.board.RouteArrowRenderer
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
 import com.example.phoneapp.capture.BoardRecognition
+import com.example.phoneapp.capture.PhotoAccess
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.MatchPattern
 import com.example.phoneapp.solver.SolveSettings
 
 @Composable
-fun HomeScreen(onCapture: () -> Unit, onChooseScreenshot: () -> Unit) {
+internal fun HomeScreen(
+    onCapture: () -> Unit,
+    onChooseScreenshot: () -> Unit,
+    screenshotShortcutEnabled: Boolean,
+    photoAccess: PhotoAccess,
+    onScreenshotShortcutChanged: (Boolean) -> Unit,
+    onRequestPhotoAccess: () -> Unit,
+    onPhotoSettings: () -> Unit,
+) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -83,10 +94,34 @@ fun HomeScreen(onCapture: () -> Unit, onChooseScreenshot: () -> Unit) {
         OutlinedButton(onClick = onChooseScreenshot) { Text("Choose existing screenshot") }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Allow screen sharing and draw-over-apps access, then use Capture in the overlay. Full photo access also enables the phone screenshot shortcut.",
+            "Allow screen sharing and draw-over-apps access, then use Capture in the overlay. Choosing an existing screenshot does not require photo library access.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Screenshot shortcut", modifier = Modifier.weight(1f))
+            Switch(
+                checked = screenshotShortcutEnabled,
+                onCheckedChange = onScreenshotShortcutChanged,
+                modifier = Modifier.semantics { contentDescription = "Screenshot shortcut" },
+            )
+        }
+        Text(
+            when {
+                !screenshotShortcutEnabled -> "Off. Use Capture in the overlay or choose a screenshot."
+                photoAccess == PhotoAccess.FULL -> "Active while the overlay is open: taking a phone screenshot captures and solves the board."
+                photoAccess == PhotoAccess.SELECTED -> "Paused: selected photos do not include new screenshots. Allow all photos, or use Capture."
+                else -> "Paused: full photo access is needed to detect new screenshots. You can still use Capture."
+            },
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (screenshotShortcutEnabled) {
+            if (photoAccess != PhotoAccess.FULL) {
+                TextButton(onClick = onRequestPhotoAccess) { Text("Allow full photo access") }
+            }
+            TextButton(onClick = onPhotoSettings) { Text("Photo permission settings") }
+        }
     }
 }
 
