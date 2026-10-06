@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build:
     name: Unit tests, lint and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -25,7 +25,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4, Node 24
         with:
           cmdline-tools-version: '16111833'
           packages: platform-tools
@@ -41,7 +41,7 @@ jobs:
           bash ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug
       - name: Save test and lint reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
         with:
           name: local-check-reports
           path: |
@@ -54,7 +54,7 @@ jobs:
   device-tests:
     name: Device tests (API ${{ matrix.api-level }})
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -69,13 +69,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4, Node 24
         with:
           cmdline-tools-version: '16111833'
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install compile SDK
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+      - name: Use matching SDK tools for emulator setup
+        # Emulator runner prepends cmdline-tools/latest to PATH.
+        run: |
+          test -x "$ANDROID_HOME/cmdline-tools/16111833/bin/sdkmanager"
+          mv "$ANDROID_HOME/cmdline-tools/latest" "$ANDROID_HOME/cmdline-tools/runner-default"
+          ln -s "$ANDROID_HOME/cmdline-tools/16111833" "$ANDROID_HOME/cmdline-tools/latest"
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
@@ -102,7 +108,7 @@ jobs:
           script: bash ./gradlew --no-daemon --build-cache :app:connectedDebugAndroidTest
       - name: Save device reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
         with:
           name: device-test-reports-api-${{ matrix.api-level }}
           path: |
