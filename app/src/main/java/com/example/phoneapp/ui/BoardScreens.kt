@@ -133,8 +133,6 @@ internal fun HomeScreen(
                 Text("Solve a saved board", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("Pick a screenshot to review and solve. Show the route in PAD when you’re ready.")
                 OutlinedButton(onClick = onChooseScreenshot, modifier = Modifier.fillMaxWidth()) { Text("Choose existing screenshot") }
-                Text("No photo-library access or screen sharing needed.", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Card {
@@ -145,7 +143,7 @@ internal fun HomeScreen(
                     Switch(checked = screenshotShortcutEnabled, onCheckedChange = onScreenshotShortcutChanged,
                         modifier = Modifier.semantics { contentDescription = "Enable screenshots" })
                 }
-                Text("Solve new screenshots while the overlay is open. Needs full photo access, but no screen sharing.",
+                Text("Solve new screenshots while the overlay is open. Needs full photo access.",
                     style = MaterialTheme.typography.bodyMedium)
                 Text(when {
                     !screenshotShortcutEnabled -> "Use Capture in the overlay, or choose a saved screenshot."
