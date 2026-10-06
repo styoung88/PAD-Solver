@@ -7,11 +7,13 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
@@ -86,7 +88,7 @@ class PermissionFlowTest {
         setOverlayMode("deny")
         ActivityScenario.launch(MainActivity::class.java).use {
             awaitText("Open PAD overlay").performClick()
-            awaitText("Show the PAD overlay", scroll = false)
+            awaitText("Show the PAD overlay", scroll = false, clickable = false)
             awaitText("Not now", scroll = false).performClick()
             assertEquals(context.packageName, device.currentPackageName)
             assertFalse(ScreenCaptureService.active)
@@ -151,11 +153,16 @@ class PermissionFlowTest {
         } finally { image.delete() }
     }
 
-    private fun awaitText(text: String, scroll: Boolean = true): SemanticsNodeInteraction {
-        compose.waitUntil(timeoutMillis = timeout) {
-            compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+    private fun awaitText(text: String, scroll: Boolean = true, clickable: Boolean = true): SemanticsNodeInteraction {
+        val selector = if (clickable) hasText(text) and hasClickAction() else hasText(text)
+        try {
+            compose.waitUntil(timeoutMillis = timeout) {
+                compose.onAllNodes(selector).fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (error: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("Missing app UI: $text\n${compose.onRoot().printToString()}", error)
         }
-        return compose.onNodeWithText(text).also { if (scroll) it.performScrollTo() }
+        return compose.onNode(selector).also { if (scroll) it.performScrollTo() }
     }
 
     private fun setOverlayMode(mode: String) {
