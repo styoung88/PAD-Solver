@@ -15,7 +15,7 @@ Follow `AGENTS.md` for branches, commits, merges, and authorized phone updates.
 
 - Preserve `.android-user-home/debug.keystore` between installs so updates retain their signing identity. Keep generated artifacts and caches untracked.
 - A Kotlin daemon `AccessDeniedException` is harmless if in-process fallback ends with `BUILD SUCCESSFUL`. Use `.\gradlew.bat --stop` and retry only for a hang or failed build.
-- CI compiles APKs before emulator startup and caches build outputs. Preserve full test execution, runner disk cleanup, and the replacement of the AVD partition setting; duplicate configuration keys can retain the oversized default.
+- CI builds APKs before emulator startup and caches outputs. Keep full test execution, disk cleanup, and single AVD partition/navigation-key entries. Software navigation avoids Android 8 SystemUI crashes on permission dialogs.
 - Required checks are deferred: GitHub returns HTTP 403 for protection on this private repository's current plan. Do not retry or change visibility unless the user changes that decision. When available, require all three workflow checks on `main`, up-to-date branches, and administrator enforcement.
 
 ## Regression decisions

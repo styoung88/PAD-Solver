@@ -101,6 +101,9 @@ jobs:
           # Replace the default entry instead of appending a duplicate AVD key.
           pre-emulator-launch-script: |
             sed -i 's/^disk.dataPartition.size=.*/disk.dataPartition.size=2048M/' "$ANDROID_AVD_HOME/test.avd/config.ini"
+            # Android 8 SystemUI crashes on permission dialogs without a navigation bar.
+            sed -i '/^hw\.mainKeys[[:space:]]*=/d' "$ANDROID_AVD_HOME/test.avd/config.ini"
+            printf 'hw.mainKeys=no\n' >> "$ANDROID_AVD_HOME/test.avd/config.ini"
             df -h "$ANDROID_AVD_HOME"
           emulator-boot-timeout: 300
           disable-animations: true
