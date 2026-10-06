@@ -74,7 +74,12 @@ internal fun PhotoAccessSettingsDialog(onOpenSettings: () -> Unit, onDismiss: ()
         onDismissRequest = onDismiss,
         title = { Text("Enable the screenshot shortcut") },
         text = {
-            Text("The shortcut needs access to all photos to detect new screenshots. Android now requires you to change this in Settings. Open Permissions and allow photo access, or keep using Capture without changing it.")
+            val permission = when {
+                android.os.Build.VERSION.SDK_INT >= 33 -> "Photos and videos"
+                android.os.Build.VERSION.SDK_INT >= 30 -> "Files and media"
+                else -> "Storage"
+            }
+            Text("The screenshot shortcut needs access to all photos to detect new screenshots. In Settings, tap Permissions, then $permission, and allow access to all photos. You can keep using Capture without changing this.")
         },
         confirmButton = { TextButton(onClick = onOpenSettings) { Text("Open Settings") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Keep using Capture") } },

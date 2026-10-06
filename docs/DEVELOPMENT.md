@@ -21,7 +21,7 @@ Follow `AGENTS.md` for branches, commits, merges, and authorized phone updates.
 ## Regression decisions
 
 - Photo library access is optional: only the screenshot shortcut requires full access. Recheck grants before watching; selected-only or denied access must leave direct capture and the picker usable. Backup/transfer allowlists retain only solve preferences, excluding captures and phone-specific settings.
-- Keep selected photo access in Android's request flow; it may offer reselection instead of full access. Explain Settings only when photo access is denied and Android no longer prompts. Hide permission controls once full access is granted.
+- Selected photo access can reopen reselection without an Allow all choice. Explain Settings for selected access or blocked denial; otherwise request permission. Use App info with a best-effort Permissions highlight; direct permission pages require system privileges. Hide permission controls with full access.
 - Test legal routes and independently checked results, not one exact path or a global optimum; the solver uses bounded search.
 - Capture must use a fresh reader to discard overlay frames, including on static boards. Do not compare image timestamps with system clocks; their time bases can differ.
 - Real projection consent/revocation, hardware acquisition/timeouts, and disk-full writes still need phone checks. For capture changes: deny and retry, capture a static board twice, stop while pending, confirm overlays close and stale routes stay cleared, then restart sharing.

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.example.phoneapp.capture.PhotoAccess
+import com.example.phoneapp.capture.ScreenshotShortcut
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -42,6 +43,29 @@ class ScreenshotShortcutScreenTest {
     @Test fun blockedDenialOpensSettingsOnlyOnExplicitSelection() {
         var settings = 0
         compose.setContent { MaterialTheme { PhotoAccessSettingsDialog({ settings++ }, {}) } }
+        compose.onNodeWithText("Open Settings").performClick()
+        compose.runOnIdle { assertEquals(1, settings) }
+    }
+
+    @Test fun managingSelectedAccessShowsGuidanceBeforeOpeningSettings() {
+        val helpVisible = mutableStateOf(false)
+        var nativeRequests = 0
+        var settings = 0
+        val shortcut = ScreenshotShortcut(compose.activity)
+        compose.setContent { MaterialTheme {
+            HomeScreen({}, {}, true, PhotoAccess.SELECTED, {}, {
+                if (shortcut.shouldOpenPhotoSettings(PhotoAccess.SELECTED, shouldShowRationale = false)) {
+                    helpVisible.value = true
+                } else nativeRequests++
+            })
+            if (helpVisible.value) PhotoAccessSettingsDialog({ settings++ }, { helpVisible.value = false })
+        } }
+        compose.onNodeWithText("Manage photo access").performScrollTo().performClick()
+        compose.onNodeWithText("Enable the screenshot shortcut").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(0, nativeRequests)
+            assertEquals(0, settings)
+        }
         compose.onNodeWithText("Open Settings").performClick()
         compose.runOnIdle { assertEquals(1, settings) }
     }

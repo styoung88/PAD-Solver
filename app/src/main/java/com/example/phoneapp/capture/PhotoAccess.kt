@@ -2,10 +2,14 @@ package com.example.phoneapp.capture
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.core.net.toUri
 
 internal enum class PhotoAccess {
     FULL, SELECTED, NONE;
@@ -38,6 +42,17 @@ internal enum class PhotoAccess {
             Build.VERSION.SDK_INT >= 33 -> arrayOf(Manifest.permission.READ_MEDIA_IMAGES)
             else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
+
+        fun settingsIntent(packageName: String): Intent =
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()).apply {
+                // AOSP Settings supports this highlight; other Settings apps may ignore it.
+                // Direct permission-page intents require privileged system permissions.
+                val highlightKey = ":settings:fragment_args_key"
+                putExtra(highlightKey, "permission_settings")
+                putExtra(":settings:show_fragment_args", Bundle().apply {
+                    putString(highlightKey, "permission_settings")
+                })
+            }
     }
 }
 
@@ -55,8 +70,8 @@ internal class ScreenshotShortcut(context: Context) {
 
     fun shouldOpenPhotoSettings(access: PhotoAccess, shouldShowRationale: Boolean): Boolean = when (access) {
         PhotoAccess.FULL -> false
-        // Keep limited access in Android's flow; it may offer reselection instead of full access.
-        PhotoAccess.SELECTED -> false
+        // Rerequesting selected access may only reopen photo selection, without an Allow all choice.
+        PhotoAccess.SELECTED -> true
         PhotoAccess.NONE -> photoAccessRequested && !shouldShowRationale
     }
 

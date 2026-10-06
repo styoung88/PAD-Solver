@@ -29,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.capture.PadBoardRecognizer
@@ -239,7 +238,7 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshPhotoAccess() {
         photoAccess = PhotoAccess.current(this)
-        if (photoAccess != PhotoAccess.NONE) photoSettingsHelpVisible = false
+        if (photoAccess == PhotoAccess.FULL) photoSettingsHelpVisible = false
         if (SolutionOverlayService.enabled) {
             startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_REFRESH_SHORTCUT))
         }
@@ -267,7 +266,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openPhotoSettings() {
-        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
+        startActivity(PhotoAccess.settingsIntent(packageName))
     }
 
     private fun requestScreenCapturePermission() {
