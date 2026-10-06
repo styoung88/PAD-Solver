@@ -63,4 +63,15 @@ class ScreenshotShortcutTest {
         }
         assertEquals(expected, permissions)
     }
+
+    @Test fun onePhotoAccessControlRequestsInitiallyAndUsesSettingsWhenRequired() {
+        val shortcut = ScreenshotShortcut(context)
+        shortcut.photoAccessRequested = false
+        assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.NONE, canRequestAgain = false))
+        shortcut.photoAccessRequested = true
+        assertTrue(ScreenshotShortcut(context).shouldOpenPhotoSettings(PhotoAccess.NONE, canRequestAgain = false))
+        assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.NONE, canRequestAgain = true))
+        assertTrue(shortcut.shouldOpenPhotoSettings(PhotoAccess.SELECTED, canRequestAgain = true))
+        assertTrue(shortcut.shouldOpenPhotoSettings(PhotoAccess.FULL, canRequestAgain = false))
+    }
 }

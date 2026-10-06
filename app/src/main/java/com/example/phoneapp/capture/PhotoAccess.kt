@@ -49,5 +49,12 @@ internal class ScreenshotShortcut(context: Context) {
         get() = preferences.getBoolean("screenshot_shortcut", true)
         set(value) { preferences.edit { putBoolean("screenshot_shortcut", value) } }
 
+    var photoAccessRequested: Boolean
+        get() = preferences.getBoolean("photo_access_requested", false)
+        set(value) { preferences.edit { putBoolean("photo_access_requested", value) } }
+
+    fun shouldOpenPhotoSettings(access: PhotoAccess, canRequestAgain: Boolean): Boolean =
+        access != PhotoAccess.NONE || (photoAccessRequested && !canRequestAgain)
+
     fun canWatch(access: PhotoAccess): Boolean = enabled && access == PhotoAccess.FULL
 }

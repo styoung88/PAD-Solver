@@ -24,20 +24,19 @@ class ScreenshotShortcutScreenTest {
     }
 
     @Test fun selectedAccessExplainsTheLimitationButKeepsBothManualActionsAvailable() {
-        showLimitedAccess(PhotoAccess.SELECTED, "Paused: selected photos do not include new screenshots. Allow all photos, or use Capture.")
+        showLimitedAccess(PhotoAccess.SELECTED, "This shortcut needs access to all photos to detect new screenshots. You’ve allowed selected photos only. You can still tap Capture.")
     }
 
     @Test fun deniedAccessExplainsTheLimitationButKeepsBothManualActionsAvailable() {
-        showLimitedAccess(PhotoAccess.NONE, "Paused: full photo access is needed to detect new screenshots. You can still use Capture.")
+        showLimitedAccess(PhotoAccess.NONE, "To use this shortcut, allow access to all photos so we can detect new screenshots. Capture works without photo access.")
     }
 
     private fun showLimitedAccess(access: PhotoAccess, message: String) {
         var captures = 0
         var picks = 0
         var permissions = 0
-        var settings = 0
         compose.setContent { MaterialTheme {
-            HomeScreen({ captures++ }, { picks++ }, true, access, {}, { permissions++ }, { settings++ })
+            HomeScreen({ captures++ }, { picks++ }, true, access, {}, { permissions++ })
         } }
         compose.onNodeWithText(message).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Open PAD overlay").performScrollTo().performClick()
@@ -47,24 +46,23 @@ class ScreenshotShortcutScreenTest {
             assertEquals(1, picks)
             assertEquals(0, permissions)
         }
-        compose.onNodeWithText("Allow full photo access").performScrollTo().performClick()
-        compose.onNodeWithText("Photo permission settings").performScrollTo().performClick()
+        compose.onNodeWithText("Manage photo access").performScrollTo().performClick()
+        compose.onNodeWithText("Allow full photo access").assertDoesNotExist()
+        compose.onNodeWithText("Photo permission settings").assertDoesNotExist()
         compose.runOnIdle {
             assertEquals(1, permissions)
-            assertEquals(1, settings)
         }
     }
 
     @Test fun switchCanDisableAnActiveShortcutAndHidePermissionActions() {
         val enabled = mutableStateOf(true)
         compose.setContent { MaterialTheme {
-            HomeScreen({}, {}, enabled.value, PhotoAccess.FULL, { enabled.value = it }, {}, {})
+            HomeScreen({}, {}, enabled.value, PhotoAccess.FULL, { enabled.value = it }, {})
         } }
-        compose.onNodeWithText("Active while the overlay is open: taking a phone screenshot captures and solves the board.")
+        compose.onNodeWithText("Take a screenshot while the overlay is open to capture and solve your board.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Screenshot shortcut").performScrollTo().performClick()
-        compose.onNodeWithText("Off. Use Capture in the overlay or choose a screenshot.").assertIsDisplayed()
-        compose.onNodeWithText("Allow full photo access").assertDoesNotExist()
-        compose.onNodeWithText("Photo permission settings").assertDoesNotExist()
+        compose.onNodeWithText("Use Capture in the overlay, or choose a saved screenshot.").assertIsDisplayed()
+        compose.onNodeWithText("Manage photo access").assertDoesNotExist()
     }
 }

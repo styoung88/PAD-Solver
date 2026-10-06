@@ -78,14 +78,14 @@ class MainActivity : ComponentActivity() {
             if (Settings.canDrawOverlays(this)) startCaptureFlow()
             else {
                 pendingOverlayStart = false
-                Toast.makeText(this, "Allow draw-over-apps access to open the PAD overlay.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "To use the floating toolbar, allow PAD Solver to appear over other apps.", Toast.LENGTH_LONG).show()
             }
             return@registerForActivityResult
         }
         if (pendingRoutePermission) {
             pendingRoutePermission = false
             if (Settings.canDrawOverlays(this)) solution?.let(::showSolutionInPad)
-            else Toast.makeText(this, "Allow draw-over-apps access to show the route.", Toast.LENGTH_LONG).show()
+            else Toast.makeText(this, "To show your route, allow PAD Solver to appear over other apps.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
         if (granted) launchMediaProjectionConsent()
         else Toast.makeText(
             this,
-            "Allow notifications to keep the PAD overlay capture session active.",
+            "Turn on notifications so you can control the screen-sharing session.",
             Toast.LENGTH_LONG,
         ).show()
     }
@@ -179,10 +179,7 @@ class MainActivity : ComponentActivity() {
                                     screenshotShortcutEnabled = screenshotShortcutEnabled,
                                     photoAccess = photoAccess,
                                     onScreenshotShortcutChanged = ::updateScreenshotShortcut,
-                                    onRequestPhotoAccess = { photoPermissionLauncher.launch(PhotoAccess.requestedPermissions()) },
-                                    onPhotoSettings = {
-                                        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
-                                    },
+                                    onManagePhotoAccess = ::managePhotoAccess,
                                 )
                             }
                         }
@@ -241,7 +238,18 @@ class MainActivity : ComponentActivity() {
         screenshotShortcutEnabled = enabled
         refreshPhotoAccess()
         if (enabled && photoAccess != PhotoAccess.FULL) {
-            photoPermissionLauncher.launch(PhotoAccess.requestedPermissions())
+            managePhotoAccess()
+        }
+    }
+
+    private fun managePhotoAccess() {
+        refreshPhotoAccess()
+        val permissions = PhotoAccess.requestedPermissions()
+        if (screenshotShortcut.shouldOpenPhotoSettings(photoAccess, shouldShowRequestPermissionRationale(permissions.first()))) {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
+        } else {
+            screenshotShortcut.photoAccessRequested = true
+            photoPermissionLauncher.launch(permissions)
         }
     }
 

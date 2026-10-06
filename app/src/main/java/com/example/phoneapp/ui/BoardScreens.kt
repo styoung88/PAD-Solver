@@ -74,8 +74,7 @@ internal fun HomeScreen(
     screenshotShortcutEnabled: Boolean,
     photoAccess: PhotoAccess,
     onScreenshotShortcutChanged: (Boolean) -> Unit,
-    onRequestPhotoAccess: () -> Unit,
-    onPhotoSettings: () -> Unit,
+    onManagePhotoAccess: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -94,7 +93,7 @@ internal fun HomeScreen(
         OutlinedButton(onClick = onChooseScreenshot) { Text("Choose existing screenshot") }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Allow screen sharing and draw-over-apps access, then use Capture in the overlay. Choosing an existing screenshot does not require photo library access.",
+            "Open the overlay and follow the setup prompts, then tap Capture to read your board. You can also choose a saved screenshot.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -109,18 +108,15 @@ internal fun HomeScreen(
         }
         Text(
             when {
-                !screenshotShortcutEnabled -> "Off. Use Capture in the overlay or choose a screenshot."
-                photoAccess == PhotoAccess.FULL -> "Active while the overlay is open: taking a phone screenshot captures and solves the board."
-                photoAccess == PhotoAccess.SELECTED -> "Paused: selected photos do not include new screenshots. Allow all photos, or use Capture."
-                else -> "Paused: full photo access is needed to detect new screenshots. You can still use Capture."
+                !screenshotShortcutEnabled -> "Use Capture in the overlay, or choose a saved screenshot."
+                photoAccess == PhotoAccess.FULL -> "Take a screenshot while the overlay is open to capture and solve your board."
+                photoAccess == PhotoAccess.SELECTED -> "This shortcut needs access to all photos to detect new screenshots. You’ve allowed selected photos only. You can still tap Capture."
+                else -> "To use this shortcut, allow access to all photos so we can detect new screenshots. Capture works without photo access."
             },
             style = MaterialTheme.typography.bodySmall,
         )
         if (screenshotShortcutEnabled) {
-            if (photoAccess != PhotoAccess.FULL) {
-                TextButton(onClick = onRequestPhotoAccess) { Text("Allow full photo access") }
-            }
-            TextButton(onClick = onPhotoSettings) { Text("Photo permission settings") }
+            TextButton(onClick = onManagePhotoAccess) { Text("Manage photo access") }
         }
     }
 }
