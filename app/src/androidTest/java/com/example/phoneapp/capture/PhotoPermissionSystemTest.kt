@@ -32,6 +32,12 @@ class PhotoPermissionSystemTest {
     @Before fun resetProbePermissions() {
         // Permission mutations are restricted to the separate test APK, never the installed app.
         check(probePackage == "${target.packageName}.test")
+        if (Build.VERSION.SDK_INT < 28) {
+            // Android 8's pm command cannot clear/set individual permission flags.
+            // Only the disposable probe APK's data and grants are reset.
+            shell("pm clear $probePackage")
+            return
+        }
         for (permission in PhotoAccess.requestedPermissions()) {
             shell("pm clear-permission-flags $probePackage $permission user-set user-fixed")
             shell("pm revoke $probePackage $permission")
@@ -63,9 +69,10 @@ class PhotoPermissionSystemTest {
         if (Build.VERSION.SDK_INT >= 34) {
             shell("pm grant $probePackage ${Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED}")
         }
-        for (permission in PhotoAccess.requestedPermissions()) {
-            val flags = if (Build.VERSION.SDK_INT >= 34) "user-set" else "user-set user-fixed"
-            shell("pm set-permission-flags $probePackage $permission $flags")
+        if (Build.VERSION.SDK_INT >= 34) {
+            for (permission in PhotoAccess.requestedPermissions()) {
+                shell("pm set-permission-flags $probePackage $permission user-set")
+            }
         }
         launchProbe()
         if (Build.VERSION.SDK_INT >= 34) {
@@ -78,6 +85,18 @@ class PhotoPermissionSystemTest {
                 AccessibilityNodeInfo.ACTION_CLICK,
             ))
             awaitObject(By.text("Request completed"))
+        } else {
+            // Establish blocked denial through Android's UI instead of shell flags.
+            repeat(2) {
+                requestAccess()
+                val deny = awaitObject(By.res(Pattern.compile(".*:id/permission_deny_button")))
+                if (it == 1 && Build.VERSION.SDK_INT < 30) {
+                    val dontAskAgain = awaitObject(By.clazz("android.widget.CheckBox"))
+                    assertTrue("Android must accept Don't ask again", dontAskAgain.accessibilityNodeInfo.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                }
+                assertTrue("Android must accept denial", deny.accessibilityNodeInfo.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                awaitObject(By.text("Request completed"))
+            }
         }
         repeat(2) {
             requestAccess()
