@@ -53,8 +53,12 @@ internal class ScreenshotShortcut(context: Context) {
         get() = preferences.getBoolean("photo_access_requested", false)
         set(value) { preferences.edit { putBoolean("photo_access_requested", value) } }
 
-    fun shouldOpenPhotoSettings(access: PhotoAccess, canRequestAgain: Boolean): Boolean =
-        access != PhotoAccess.NONE || (photoAccessRequested && !canRequestAgain)
+    fun shouldOpenPhotoSettings(access: PhotoAccess, shouldShowRationale: Boolean): Boolean = when (access) {
+        PhotoAccess.FULL -> true
+        // Selected access supports the photo selection dialog again, regardless of rationale state.
+        PhotoAccess.SELECTED -> false
+        PhotoAccess.NONE -> photoAccessRequested && !shouldShowRationale
+    }
 
     fun canWatch(access: PhotoAccess): Boolean = enabled && access == PhotoAccess.FULL
 }

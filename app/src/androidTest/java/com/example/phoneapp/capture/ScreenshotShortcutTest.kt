@@ -67,11 +67,20 @@ class ScreenshotShortcutTest {
     @Test fun onePhotoAccessControlRequestsInitiallyAndUsesSettingsWhenRequired() {
         val shortcut = ScreenshotShortcut(context)
         shortcut.photoAccessRequested = false
-        assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.NONE, canRequestAgain = false))
+        assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.NONE, shouldShowRationale = false))
         shortcut.photoAccessRequested = true
-        assertTrue(ScreenshotShortcut(context).shouldOpenPhotoSettings(PhotoAccess.NONE, canRequestAgain = false))
-        assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.NONE, canRequestAgain = true))
-        assertTrue(shortcut.shouldOpenPhotoSettings(PhotoAccess.SELECTED, canRequestAgain = true))
-        assertTrue(shortcut.shouldOpenPhotoSettings(PhotoAccess.FULL, canRequestAgain = false))
+        assertTrue(ScreenshotShortcut(context).shouldOpenPhotoSettings(PhotoAccess.NONE, shouldShowRationale = false))
+        assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.NONE, shouldShowRationale = true))
+        assertTrue(shortcut.shouldOpenPhotoSettings(PhotoAccess.FULL, shouldShowRationale = false))
+        assertTrue(shortcut.shouldOpenPhotoSettings(PhotoAccess.FULL, shouldShowRationale = true))
+    }
+
+    @Test fun selectedPhotoAccessAlwaysOffersTheDialogAgain() {
+        val shortcut = ScreenshotShortcut(context)
+        for (previouslyRequested in listOf(false, true)) {
+            shortcut.photoAccessRequested = previouslyRequested
+            assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.SELECTED, shouldShowRationale = false))
+            assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.SELECTED, shouldShowRationale = true))
+        }
     }
 }
