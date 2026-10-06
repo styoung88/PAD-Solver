@@ -1,6 +1,6 @@
 ## Change
 
-Describe the problem and resulting behavior. Include a before/after example where useful.
+Summarize the final changes and resulting behavior for a reviewer. Omit conversation history and progress logs.
 
 ## Validation
 

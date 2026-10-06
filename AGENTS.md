@@ -2,6 +2,8 @@
 
 Use Conventional Commits for all commit messages: `<type>[optional scope]: <description>`, such as `feat: add a feature`, `fix: correct a bug`, or `docs: update development instructions`. See `CONTRIBUTING.md` for details.
 
+Write PR descriptions and comments for reviewers: explain the final changes, resulting behavior, validation, and relevant limitations. Keep detail proportional to the diff. Omit conversation history, running progress logs, routine commands, and transient troubleshooting.
+
 Create a dedicated feature branch from an up-to-date `main` before starting each new feature. Use the `codex/` branch prefix unless the user specifies another name. Continue related work on its existing feature branch.
 
 When the user requests merging a branch, include branch cleanup as part of the request. Commit and push the completed changes, merge into `main`, push `main`, then delete the fully merged feature branch both locally and on the remote. Finish on `main` and report the merge and cleanup status. Preserve uncommitted work and do not delete a branch before its changes are safely merged and pushed.
