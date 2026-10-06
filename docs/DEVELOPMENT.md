@@ -9,7 +9,7 @@ Follow `AGENTS.md` for branches, commits, merges, and authorized phone updates.
 - Gradle tasks: `:app:assembleDebug`, `:app:testDebugUnitTest`, `:app:lintDebug`, `:app:connectedDebugAndroidTest` (`.\gradlew.bat` on Windows).
 - JVM tests: `app/src/test`; device tests: `app/src/androidTest`; committed image fixtures: `app/src/androidTest/assets`.
 - UI tests require an unlocked phone. Keep it awake during testing and restore its prior wake setting and preferences afterward.
-- Instrumentation cleanup can uninstall the app. Reinstall with the install script after device tests and verify installation.
+- On the phone, pass `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true` to retain app data and permissions. Otherwise cleanup can uninstall the app and reset them. Reinstall the debug app with the install script after tests.
 
 ## Known failure handling
 
@@ -21,6 +21,7 @@ Follow `AGENTS.md` for branches, commits, merges, and authorized phone updates.
 ## Regression decisions
 
 - Photo library access is optional: only the screenshot shortcut requires full access. Recheck grants before watching; selected-only or denied access must leave direct capture and the picker usable. Backup/transfer allowlists retain only solve preferences, excluding captures and phone-specific settings.
+- Keep selected photo access in Android's request flow; it may offer reselection instead of full access. Explain Settings only when photo access is denied and Android no longer prompts. Hide permission controls once full access is granted.
 - Test legal routes and independently checked results, not one exact path or a global optimum; the solver uses bounded search.
 - Capture must use a fresh reader to discard overlay frames, including on static boards. Do not compare image timestamps with system clocks; their time bases can differ.
 - Real projection consent/revocation, hardware acquisition/timeouts, and disk-full writes still need phone checks. For capture changes: deny and retry, capture a static board twice, stop while pending, confirm overlays close and stale routes stay cleared, then restart sharing.

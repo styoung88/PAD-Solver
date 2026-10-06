@@ -54,8 +54,8 @@ internal class ScreenshotShortcut(context: Context) {
         set(value) { preferences.edit { putBoolean("photo_access_requested", value) } }
 
     fun shouldOpenPhotoSettings(access: PhotoAccess, shouldShowRationale: Boolean): Boolean = when (access) {
-        PhotoAccess.FULL -> true
-        // Selected access supports the photo selection dialog again, regardless of rationale state.
+        PhotoAccess.FULL -> false
+        // Keep limited access in Android's flow; it may offer reselection instead of full access.
         PhotoAccess.SELECTED -> false
         PhotoAccess.NONE -> photoAccessRequested && !shouldShowRationale
     }

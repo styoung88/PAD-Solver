@@ -44,6 +44,7 @@ import com.example.phoneapp.solver.SolveSettings
 import com.example.phoneapp.solver.SolveSettingsStore
 import com.example.phoneapp.ui.BoardPreviewScreen
 import com.example.phoneapp.ui.HomeScreen
+import com.example.phoneapp.ui.PhotoAccessSettingsDialog
 import com.example.phoneapp.ui.SolveSettingsDrawer
 import com.example.phoneapp.ui.SolutionScreen
 import kotlinx.coroutines.Dispatchers
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
     private val screenshotShortcut by lazy { ScreenshotShortcut(this) }
     private var screenshotShortcutEnabled by mutableStateOf(true)
     private var photoAccess by mutableStateOf(PhotoAccess.NONE)
+    private var photoSettingsHelpVisible by mutableStateOf(false)
     private val photoPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         refreshPhotoAccess()
     }
@@ -140,6 +142,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
+                    if (photoSettingsHelpVisible) {
+                        PhotoAccessSettingsDialog(
+                            onOpenSettings = {
+                                photoSettingsHelpVisible = false
+                                openPhotoSettings()
+                            },
+                            onDismiss = { photoSettingsHelpVisible = false },
+                        )
+                    }
                     SolveSettingsDrawer(
                         settings = solveSettings,
                         isSolving = isSolving,
@@ -228,6 +239,7 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshPhotoAccess() {
         photoAccess = PhotoAccess.current(this)
+        if (photoAccess != PhotoAccess.NONE) photoSettingsHelpVisible = false
         if (SolutionOverlayService.enabled) {
             startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_REFRESH_SHORTCUT))
         }
@@ -244,13 +256,18 @@ class MainActivity : ComponentActivity() {
 
     private fun managePhotoAccess() {
         refreshPhotoAccess()
+        if (photoAccess == PhotoAccess.FULL) return
         val permissions = PhotoAccess.requestedPermissions()
         if (screenshotShortcut.shouldOpenPhotoSettings(photoAccess, shouldShowRequestPermissionRationale(permissions.first()))) {
-            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
+            photoSettingsHelpVisible = true
         } else {
             screenshotShortcut.photoAccessRequested = true
             photoPermissionLauncher.launch(permissions)
         }
+    }
+
+    private fun openPhotoSettings() {
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
     }
 
     private fun requestScreenCapturePermission() {

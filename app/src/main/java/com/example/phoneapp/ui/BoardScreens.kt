@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
@@ -66,6 +67,19 @@ import com.example.phoneapp.capture.PhotoAccess
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.MatchPattern
 import com.example.phoneapp.solver.SolveSettings
+
+@Composable
+internal fun PhotoAccessSettingsDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enable the screenshot shortcut") },
+        text = {
+            Text("The shortcut needs access to all photos to detect new screenshots. Android now requires you to change this in Settings. Open Permissions and allow photo access, or keep using Capture without changing it.")
+        },
+        confirmButton = { TextButton(onClick = onOpenSettings) { Text("Open Settings") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Keep using Capture") } },
+    )
+}
 
 @Composable
 internal fun HomeScreen(
@@ -115,7 +129,7 @@ internal fun HomeScreen(
             },
             style = MaterialTheme.typography.bodySmall,
         )
-        if (screenshotShortcutEnabled) {
+        if (screenshotShortcutEnabled && photoAccess != PhotoAccess.FULL) {
             TextButton(onClick = onManagePhotoAccess) { Text("Manage photo access") }
         }
     }

@@ -71,11 +71,11 @@ class ScreenshotShortcutTest {
         shortcut.photoAccessRequested = true
         assertTrue(ScreenshotShortcut(context).shouldOpenPhotoSettings(PhotoAccess.NONE, shouldShowRationale = false))
         assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.NONE, shouldShowRationale = true))
-        assertTrue(shortcut.shouldOpenPhotoSettings(PhotoAccess.FULL, shouldShowRationale = false))
-        assertTrue(shortcut.shouldOpenPhotoSettings(PhotoAccess.FULL, shouldShowRationale = true))
+        assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.FULL, shouldShowRationale = false))
+        assertFalse(shortcut.shouldOpenPhotoSettings(PhotoAccess.FULL, shouldShowRationale = true))
     }
 
-    @Test fun selectedPhotoAccessAlwaysOffersTheDialogAgain() {
+    @Test fun selectedAccessStaysInAndroidsFlowRegardlessOfFullAccessRationale() {
         val shortcut = ScreenshotShortcut(context)
         for (previouslyRequested in listOf(false, true)) {
             shortcut.photoAccessRequested = previouslyRequested

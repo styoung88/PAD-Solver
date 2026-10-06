@@ -23,6 +23,29 @@ class ScreenshotShortcutScreenTest {
         compose.runOnUiThread { compose.activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
 
+    @Test fun blockedDenialExplainsSettingsAndLetsUsersKeepUsingCapture() {
+        var settings = 0
+        var dismissed = 0
+        compose.setContent { MaterialTheme {
+            PhotoAccessSettingsDialog({ settings++ }, { dismissed++ })
+        } }
+        compose.onNodeWithText("Enable the screenshot shortcut").assertIsDisplayed()
+        compose.onNodeWithText("Open Settings").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, settings) }
+        compose.onNodeWithText("Keep using Capture").performClick()
+        compose.runOnIdle {
+            assertEquals(0, settings)
+            assertEquals(1, dismissed)
+        }
+    }
+
+    @Test fun blockedDenialOpensSettingsOnlyOnExplicitSelection() {
+        var settings = 0
+        compose.setContent { MaterialTheme { PhotoAccessSettingsDialog({ settings++ }, {}) } }
+        compose.onNodeWithText("Open Settings").performClick()
+        compose.runOnIdle { assertEquals(1, settings) }
+    }
+
     @Test fun selectedAccessExplainsTheLimitationButKeepsBothManualActionsAvailable() {
         showLimitedAccess(PhotoAccess.SELECTED, "This shortcut needs access to all photos to detect new screenshots. You’ve allowed selected photos only. You can still tap Capture.")
     }
@@ -61,6 +84,7 @@ class ScreenshotShortcutScreenTest {
         } }
         compose.onNodeWithText("Take a screenshot while the overlay is open to capture and solve your board.")
             .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Manage photo access").assertDoesNotExist()
         compose.onNodeWithContentDescription("Screenshot shortcut").performScrollTo().performClick()
         compose.onNodeWithText("Use Capture in the overlay, or choose a saved screenshot.").assertIsDisplayed()
         compose.onNodeWithText("Manage photo access").assertDoesNotExist()
