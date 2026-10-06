@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
@@ -67,7 +68,11 @@ class PhotoPermissionSystemTest {
             requestAccess()
             val declineMore = awaitObject(By.text(Pattern.compile("(?i)don[’']t (select|allow) more")))
             assertTrue("Before declining more photos, Android still offers full access", device.hasObject(allow))
-            declineMore.click()
+            // Slow emulator window transitions can drop an injected touch even after the
+            // button appears. Invoke the native button's accessibility action instead.
+            assertTrue("Android must accept Don't select more", declineMore.accessibilityNodeInfo.performAction(
+                AccessibilityNodeInfo.ACTION_CLICK,
+            ))
             awaitObject(By.text("Request completed"))
         }
         repeat(2) {
