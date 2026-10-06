@@ -35,7 +35,7 @@ enum class MatchPattern(val displayName: String) {
         // Each pattern has different geometry even when board dimensions match.
         val key = Triple(this, board.columns, board.rows)
         val shapes = templateCache.computeIfAbsent(key) { templates(board.columns, board.rows) }
-        val colors = if (color == null) ATTACK_COLORS else listOf(color)
+        val colors = if (color == null) OrbColor.attackingColors else listOf(color)
         val orbPositionsByColor = colors.associateWith { candidateColor ->
             board.orbs.mapIndexedNotNull { index, orb ->
                 if (orb.color == candidateColor) board.positionOf(index) else null
@@ -80,7 +80,7 @@ enum class MatchPattern(val displayName: String) {
             }
         }
 
-        val selectedColors = if (color == null) ATTACK_COLORS else listOf(color)
+        val selectedColors = if (color == null) OrbColor.attackingColors else listOf(color)
         val colorCells = Array(OrbColor.entries.size) { IntArray(board.orbs.size) }
         val colorCounts = IntArray(OrbColor.entries.size)
         val colorAtCell = IntArray(board.orbs.size)
@@ -406,13 +406,6 @@ enum class MatchPattern(val displayName: String) {
     }
 
     private companion object {
-        val ATTACK_COLORS = listOf(
-            OrbColor.FIRE,
-            OrbColor.WATER,
-            OrbColor.WOOD,
-            OrbColor.LIGHT,
-            OrbColor.DARK,
-        )
         val templateCache = ConcurrentHashMap<Triple<MatchPattern, Int, Int>, List<Set<BoardPosition>>>()
         val tpaTemplateCache = ConcurrentHashMap<Pair<Int, Int>, List<IntArray>>()
         val lArmTemplateCache = ConcurrentHashMap<Set<BoardPosition>, List<Pair<List<BoardPosition>, List<BoardPosition>>>>()

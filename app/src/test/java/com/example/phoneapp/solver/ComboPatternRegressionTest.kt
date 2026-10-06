@@ -1,6 +1,5 @@
 package com.example.phoneapp.solver
 
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.Orb
 import com.example.phoneapp.board.OrbColor
@@ -9,9 +8,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
 
-@RunWith(AndroidJUnit4::class)
 class ComboPatternRegressionTest {
     @Test
     fun fiveComboMinimumStillFindsWoodTpaOnScreenshotBoard() {

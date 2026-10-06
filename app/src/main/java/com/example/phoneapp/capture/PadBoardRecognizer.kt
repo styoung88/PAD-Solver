@@ -57,7 +57,7 @@ class PadBoardRecognizer {
             val centerPenalty = abs(centerY - bitmap.height * PREFERRED_CENTER_Y) / bitmap.height
             val score = recognized + variety * VARIETY_BONUS + averageColorSupport * COLOR_SUPPORT_WEIGHT -
                 centerPenalty * CENTER_PENALTY
-            return Candidate(left, top, boardWidth, boardHeight, colors, recognized, variety, averageColorSupport, score)
+            return Candidate(left, top, boardWidth, boardHeight, colors, recognized, averageColorSupport, score)
         }
 
         // Coarse vertical scan locates the board, followed by a pixel-level
@@ -213,8 +213,6 @@ class PadBoardRecognizer {
         val sampleRadius = (cellSize * ENHANCED_MARKER_SAMPLE_RADIUS).toInt().coerceAtLeast(1)
         val patchStep = sampleRadius
         val hsv = FloatArray(3)
-        var bestPlusScore = 0
-        var bestControlScore = Int.MAX_VALUE
 
         // PAD's badge sits at the lower-right edge, but its apparent offset and
         // size vary with orb art and screenshot scaling. Search a normalized
@@ -251,12 +249,6 @@ class PadBoardRecognizer {
                             )
                         ) goldControlPatches++
                     }
-                    if (goldPatches > bestPlusScore ||
-                        (goldPatches == bestPlusScore && goldControlPatches < bestControlScore)
-                    ) {
-                        bestPlusScore = goldPatches
-                        bestControlScore = goldControlPatches
-                    }
                     if (goldPatches >= MIN_ENHANCED_PLUS_PATCHES &&
                         goldControlPatches <= MAX_ENHANCED_CONTROL_PATCHES
                     ) return true
@@ -265,8 +257,7 @@ class PadBoardRecognizer {
             }
             markerOffsetY += ENHANCED_MARKER_OFFSET_STEP
         }
-        return bestPlusScore >= MIN_ENHANCED_PLUS_PATCHES &&
-            bestControlScore <= MAX_ENHANCED_CONTROL_PATCHES
+        return false
     }
 
     private fun hasGoldPatch(
@@ -306,7 +297,6 @@ class PadBoardRecognizer {
         val height: Float,
         val colors: List<OrbColor>,
         val recognized: Int,
-        val colorVariety: Int,
         val averageColorSupport: Float,
         val score: Float,
     )

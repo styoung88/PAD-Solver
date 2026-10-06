@@ -16,13 +16,19 @@ import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardPosition
 import com.example.phoneapp.board.RouteArrowRenderer
 import com.example.phoneapp.MainActivity
+import com.example.phoneapp.solver.BoardSolver
+import com.example.phoneapp.solver.SolveOptions
+import com.example.phoneapp.solver.SolveSettingsStore
+import com.example.phoneapp.util.dpToPx
+import com.example.phoneapp.util.parcelableExtra
 
 class SolutionOverlayService : Service() {
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
     private var solveJob: kotlinx.coroutines.Job? = null
     private var latestCapturePath: String? = null
     private val toolbarPreferences by lazy { getSharedPreferences("overlay_toolbar", MODE_PRIVATE) }
-    private var toolbarParams: WindowManager.LayoutParams? = null
+    private val settingsStore by lazy { SolveSettingsStore(this) }
+    private var toolbarLayoutParams: WindowManager.LayoutParams? = null
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val startedAt = System.currentTimeMillis() / 1000
@@ -71,8 +77,8 @@ class SolutionOverlayService : Service() {
         clearRoute()
         latestCapturePath = path
 
-        closeControl?.visibility = View.VISIBLE
-        closeControl?.setStatus("Reading board…", busy = true)
+        toolbarView?.visibility = View.VISIBLE
+        toolbarView?.setStatus("Reading board…", busy = true)
         solveJob = scope.launch {
             try {
                 val recognized = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
@@ -81,58 +87,49 @@ class SolutionOverlayService : Service() {
                     finally { bitmap.recycle() }
                 }
                 if (recognized == null) {
-                    closeControl?.setStatus("Board not recognized. Try another capture.", isError = true, hasCapture = true)
+                    toolbarView?.setStatus("Board not recognized. Try another capture.", isError = true)
                     return@launch
                 }
-                closeControl?.setStatus("Finding your route…", busy = true)
-                val prefs = getSharedPreferences("solver_preferences", MODE_PRIVATE)
-                val color = prefs.getString("preferred_orb_color", null)?.let { com.example.phoneapp.board.OrbColor.valueOf(it) }
-                val target = prefs.getInt("target_combo_count", 0).takeIf { it > 0 }
-                val pattern = prefs.getString("match_pattern", null)?.let { com.example.phoneapp.solver.MatchPattern.valueOf(it) }
-                val goal = when {
-                    target != null -> com.example.phoneapp.solver.TargetComboCount(target, color, pattern)
-                    pattern != null -> com.example.phoneapp.solver.MaximizeMatchPattern(pattern, color)
-                    color != null -> com.example.phoneapp.solver.MaximizeColorDamage(color)
-                    else -> com.example.phoneapp.solver.MaximizeCombos
-                }
-                val result = com.example.phoneapp.solver.BoardSolver().solve(recognized.board, com.example.phoneapp.solver.SolveOptions(goal = goal))
+                toolbarView?.setStatus("Finding your route…", busy = true)
+                val settings = settingsStore.load()
+                val result = BoardSolver().solve(recognized.board, SolveOptions(goal = settings.toGoal()))
                 if (result.goalSatisfied) {
                     showRoute(recognized.boardBounds, result.path.map(recognized.board::indexOf).toIntArray(), recognized.captureWidth, recognized.captureHeight)
                 } else {
-                    closeControl?.setStatus("No matching route. Adjust your settings.", isError = true, hasCapture = true)
+                    toolbarView?.setStatus("No matching route. Adjust your settings.", isError = true)
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
                 android.util.Log.e("RouteOverlay", "Automatic solve failed", error)
 
-                closeControl?.setStatus("Solve failed. Adjust settings or try again.", isError = true, hasCapture = true)
+                toolbarView?.setStatus("Solve failed. Adjust settings or try again.", isError = true)
             }
         }
     }
 
     private var routeView: RouteOverlayView? = null
-    private var closeControl: OverlayControlsView? = null
+    private var toolbarView: OverlayControlsView? = null
     private var windowManager: WindowManager? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_ENABLE -> {
                 windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-                showCaptureControl()
+                showToolbar()
                 return START_NOT_STICKY
             }
             ACTION_CAPTURE_FAILED -> {
 
-                closeControl?.visibility = View.VISIBLE
-                closeControl?.setStatus("Capture failed. Tap Capture to retry.", isError = true)
+                toolbarView?.visibility = View.VISIBLE
+                toolbarView?.setStatus("Capture failed. Tap Capture to retry.", isError = true)
                 return START_NOT_STICKY
             }
             ACTION_PROCESSING -> {
 
                 clearRoute()
                 latestCapturePath = null
-                closeControl?.visibility = View.INVISIBLE
+                toolbarView?.visibility = View.INVISIBLE
                 return START_NOT_STICKY
             }
             ACTION_SOLVE_CAPTURE -> {
@@ -185,13 +182,13 @@ class SolutionOverlayService : Service() {
         runCatching { windowManager?.addView(view, params) }
             .onFailure { android.util.Log.e("RouteOverlay", "Could not attach route overlay view", it) }
 
-        showCaptureControl()
+        showToolbar()
     }
 
-    private fun showCaptureControl() {
+    private fun showToolbar() {
 
-        closeControl?.let { runCatching { windowManager?.removeView(it) } }
-        val close = OverlayControlsView(this,
+        toolbarView?.let { runCatching { windowManager?.removeView(it) } }
+        val toolbar = OverlayControlsView(this,
             onCapture = ::requestCapture,
             onSettings = ::openLatestCapture,
             onClose = {
@@ -201,25 +198,25 @@ class SolutionOverlayService : Service() {
             initiallyLocked = toolbarPreferences.getBoolean("locked", false),
             onLockChanged = { toolbarPreferences.edit().putBoolean("locked", it).apply() },
             onDrag = { dx, dy ->
-                val params = toolbarParams
-                val view = closeControl
+                val params = toolbarLayoutParams
+                val view = toolbarView
                 if (params != null && view != null) {
                     val metrics = resources.displayMetrics
                     // END gravity measures the horizontal offset from the right edge.
                     params.x = (params.x - dx.toInt()).coerceIn(0, (metrics.widthPixels - view.width).coerceAtLeast(0))
-                    params.y = (params.y + dy.toInt()).coerceIn(0, (metrics.heightPixels - view.height - dp(32)).coerceAtLeast(0))
+                    params.y = (params.y + dy.toInt()).coerceIn(0, (metrics.heightPixels - view.height - resources.dpToPx(32)).coerceAtLeast(0))
                     windowManager?.updateViewLayout(view, params)
                 }
             },
             onDragFinished = {
-                toolbarParams?.let { toolbarPreferences.edit().putInt("x", it.x).putInt("y", it.y).apply() }
+                toolbarLayoutParams?.let { toolbarPreferences.edit().putInt("x", it.x).putInt("y", it.y).apply() }
             },
         ).apply {
-            setStatus(if (routeView == null) "Ready for a new board" else "Route ready", hasCapture = latestCapturePath != null)
+            setStatus(if (routeView == null) "Ready for a new board" else "Route ready")
         }
-        closeControl = close
-        val closeParams = WindowManager.LayoutParams(
-            dp(260),
+        toolbarView = toolbar
+        val toolbarParams = WindowManager.LayoutParams(
+            resources.dpToPx(260),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
@@ -227,11 +224,11 @@ class SolutionOverlayService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.END
             alpha = 1f
-            x = toolbarPreferences.getInt("x", dp(8)).coerceIn(0, (resources.displayMetrics.widthPixels - dp(260)).coerceAtLeast(0))
-            y = toolbarPreferences.getInt("y", dp(48)).coerceIn(0, (resources.displayMetrics.heightPixels - dp(180)).coerceAtLeast(0))
+            x = toolbarPreferences.getInt("x", resources.dpToPx(8)).coerceIn(0, (resources.displayMetrics.widthPixels - resources.dpToPx(260)).coerceAtLeast(0))
+            y = toolbarPreferences.getInt("y", resources.dpToPx(48)).coerceIn(0, (resources.displayMetrics.heightPixels - resources.dpToPx(180)).coerceAtLeast(0))
         }
-        toolbarParams = closeParams
-        runCatching { windowManager?.addView(close, closeParams) }
+        toolbarLayoutParams = toolbarParams
+        runCatching { windowManager?.addView(toolbar, toolbarParams) }
     }
 
     private fun openLatestCapture() {
@@ -252,20 +249,12 @@ class SolutionOverlayService : Service() {
         scope.cancel()
         routeView?.let { runCatching { windowManager?.removeView(it) } }
         routeView = null
-        closeControl?.let { runCatching { windowManager?.removeView(it) } }
-        closeControl = null
+        toolbarView?.let { runCatching { windowManager?.removeView(it) } }
+        toolbarView = null
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
-    private inline fun <reified T : android.os.Parcelable> Intent.parcelableExtra(key: String): T? =
-        if (Build.VERSION.SDK_INT >= 33) getParcelableExtra(key, T::class.java) else {
-            @Suppress("DEPRECATION")
-            getParcelableExtra(key)
-        }
 
     private class RouteOverlayView(
         context: android.content.Context,

@@ -23,14 +23,12 @@ import android.os.IBinder
 import android.util.DisplayMetrics
 import androidx.core.app.NotificationCompat
 import com.example.phoneapp.R
+import com.example.phoneapp.util.parcelableExtra
 import java.io.File
 import java.io.FileOutputStream
-import java.util.concurrent.atomic.AtomicBoolean
 
 class ScreenCaptureService : Service() {
-    @Volatile private var frameReady = false
-    private val capturePending = AtomicBoolean(false)
-    @Volatile private var captureSequence = 0
+    private val captureRequest = CaptureRequest()
     private val mainHandler = Handler(android.os.Looper.getMainLooper())
     private var projection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
@@ -98,7 +96,7 @@ class ScreenCaptureService : Service() {
 
     private fun onImageAvailable(reader: ImageReader) {
         val image = runCatching { reader.acquireLatestImage() }.getOrNull() ?: return
-        if (reader !== imageReader || !frameReady || !capturePending.compareAndSet(true, false)) {
+        if (reader !== imageReader || !captureRequest.takeFrame()) {
             image.close()
             return
         }
@@ -135,34 +133,30 @@ class ScreenCaptureService : Service() {
     }
 
     private fun captureCurrentFrame() {
-        if (projection == null || !SolutionOverlayService.enabled || capturePending.get()) return
-        val sequence = ++captureSequence
+        if (projection == null || !SolutionOverlayService.enabled) return
+        val sequence = captureRequest.begin() ?: return
         if (SolutionOverlayService.enabled) {
             startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_PROCESSING))
         }
-        frameReady = false
-        capturePending.set(true)
         virtualDisplay?.surface = null
         mainHandler.postDelayed({
             val captureWorker = worker ?: return@postDelayed
             Handler(captureWorker.looper).post {
-                if (!active || sequence != captureSequence) return@post
+                if (!active || !captureRequest.isCurrent(sequence)) return@post
                 runCatching {
                     val previous = imageReader ?: return@post
                     val fresh = replaceCaptureReader(previous)
                     fresh.setOnImageAvailableListener(::onImageAvailable, Handler(captureWorker.looper))
                     imageReader = fresh
-                    frameReady = true
-                    virtualDisplay?.surface = fresh.surface
+                    if (captureRequest.markReady(sequence)) virtualDisplay?.surface = fresh.surface
                 }.onFailure {
-                    capturePending.set(false)
                     android.util.Log.e("PadCapture", "Could not prepare fresh capture", it)
-                    reportCaptureFailure()
+                    if (captureRequest.fail(sequence)) reportCaptureFailure()
                 }
             }
         }, 350)
         mainHandler.postDelayed({
-            if (sequence == captureSequence && capturePending.compareAndSet(true, false)) {
+            if (captureRequest.fail(sequence)) {
                 reportCaptureFailure()
                 android.util.Log.w("PadCapture", "Capture timed out waiting for a fresh frame")
                 updateNotification("Capture timed out. Retry from the overlay.")
@@ -233,6 +227,7 @@ class ScreenCaptureService : Service() {
 
     override fun onDestroy() {
         active = false
+        captureRequest.cancel()
         mainHandler.removeCallbacksAndMessages(null)
         stopService(Intent(this, SolutionOverlayService::class.java))
         virtualDisplay?.release()
@@ -247,12 +242,6 @@ class ScreenCaptureService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    private inline fun <reified T : android.os.Parcelable> Intent.parcelableExtra(key: String): T? =
-        if (Build.VERSION.SDK_INT >= 33) getParcelableExtra(key, T::class.java) else {
-            @Suppress("DEPRECATION")
-            getParcelableExtra(key)
-        }
 
     companion object {
         internal fun replaceCaptureReader(previous: ImageReader): ImageReader {
