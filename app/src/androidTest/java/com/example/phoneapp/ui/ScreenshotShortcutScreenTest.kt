@@ -5,6 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -30,7 +33,7 @@ class ScreenshotShortcutScreenTest {
         compose.setContent { MaterialTheme {
             PhotoAccessSettingsDialog({ settings++ }, { dismissed++ })
         } }
-        compose.onNodeWithText("Enable the screenshot shortcut").assertIsDisplayed()
+        compose.onNodeWithText("Enable screenshots").assertIsDisplayed()
         compose.onNodeWithText("Open Settings").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, settings) }
         compose.onNodeWithText("Keep using Capture").performClick()
@@ -61,7 +64,7 @@ class ScreenshotShortcutScreenTest {
             if (helpVisible.value) PhotoAccessSettingsDialog({ settings++ }, { helpVisible.value = false })
         } }
         compose.onNodeWithText("Manage photo access").performScrollTo().performClick()
-        compose.onNodeWithText("Enable the screenshot shortcut").assertIsDisplayed()
+        compose.onNode(hasText("Enable screenshots") and hasAnyAncestor(isDialog())).assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(0, nativeRequests)
             assertEquals(0, settings)
@@ -71,11 +74,11 @@ class ScreenshotShortcutScreenTest {
     }
 
     @Test fun selectedAccessExplainsTheLimitationButKeepsBothManualActionsAvailable() {
-        showLimitedAccess(PhotoAccess.SELECTED, "This shortcut needs access to all photos to detect new screenshots. You’ve allowed selected photos only. You can still tap Capture.")
+        showLimitedAccess(PhotoAccess.SELECTED, "To detect new screenshots, PAD Solver needs access to all photos. You’ve allowed selected photos only. You can still tap Capture.")
     }
 
     @Test fun deniedAccessExplainsTheLimitationButKeepsBothManualActionsAvailable() {
-        showLimitedAccess(PhotoAccess.NONE, "To use this shortcut, allow access to all photos so we can detect new screenshots. Capture works without photo access.")
+        showLimitedAccess(PhotoAccess.NONE, "Allow access to all photos so PAD Solver can detect new screenshots. Capture works without photo access.")
     }
 
     private fun showLimitedAccess(access: PhotoAccess, message: String) {
@@ -109,7 +112,7 @@ class ScreenshotShortcutScreenTest {
         compose.onNodeWithText("Take a screenshot while the overlay is open to capture and solve your board.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Manage photo access").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Screenshot shortcut").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Enable screenshots").performScrollTo().performClick()
         compose.onNodeWithText("Use Capture in the overlay, or choose a saved screenshot.").assertIsDisplayed()
         compose.onNodeWithText("Manage photo access").assertDoesNotExist()
     }

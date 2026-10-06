@@ -59,7 +59,7 @@ class SolutionOverlayService : Service() {
             }
         }.onFailure {
             refreshScreenshotShortcut()
-            toolbarView?.setShortcutStatus("Screenshot shortcut unavailable. Tap Capture instead.")
+            toolbarView?.setShortcutStatus("Screenshots unavailable. Tap Capture instead.")
             android.util.Log.w("RouteOverlay", "Screenshot observation unavailable", it)
         }
     }
@@ -84,10 +84,10 @@ class SolutionOverlayService : Service() {
             handler.removeCallbacks(checkScreenshots)
         }
         toolbarView?.setShortcutStatus(when {
-            !screenshotShortcut.enabled -> "Screenshot shortcut off. Tap Capture instead."
-            access != PhotoAccess.FULL -> "Screenshot shortcut needs access to all photos. Tap Capture instead."
-            !screenshotObserverRegistered -> "Screenshot shortcut unavailable. Tap Capture instead."
-            else -> "Screenshot shortcut on"
+            !screenshotShortcut.enabled -> "Screenshots disabled. Tap Capture instead."
+            access != PhotoAccess.FULL -> "Screenshots need access to all photos. Tap Capture instead."
+            !screenshotObserverRegistered -> "Screenshots unavailable. Tap Capture instead."
+            else -> "Screenshots enabled"
         })
     }
 

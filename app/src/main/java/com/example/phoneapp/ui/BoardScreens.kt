@@ -72,14 +72,14 @@ import com.example.phoneapp.solver.SolveSettings
 internal fun PhotoAccessSettingsDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Enable the screenshot shortcut") },
+        title = { Text("Enable screenshots") },
         text = {
             val permission = when {
                 android.os.Build.VERSION.SDK_INT >= 33 -> "Photos and videos"
                 android.os.Build.VERSION.SDK_INT >= 30 -> "Files and media"
                 else -> "Storage"
             }
-            Text("The screenshot shortcut needs access to all photos to detect new screenshots. In Settings, tap Permissions, then $permission, and allow access to all photos. You can keep using Capture without changing this.")
+            Text("To detect new screenshots, PAD Solver needs access to all photos. In Settings, tap Permissions, then $permission, and allow access to all photos. You can keep using Capture without changing this.")
         },
         confirmButton = { TextButton(onClick = onOpenSettings) { Text("Open Settings") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Keep using Capture") } },
@@ -118,19 +118,19 @@ internal fun HomeScreen(
         )
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Screenshot shortcut", modifier = Modifier.weight(1f))
+            Text("Enable screenshots", modifier = Modifier.weight(1f))
             Switch(
                 checked = screenshotShortcutEnabled,
                 onCheckedChange = onScreenshotShortcutChanged,
-                modifier = Modifier.semantics { contentDescription = "Screenshot shortcut" },
+                modifier = Modifier.semantics { contentDescription = "Enable screenshots" },
             )
         }
         Text(
             when {
                 !screenshotShortcutEnabled -> "Use Capture in the overlay, or choose a saved screenshot."
                 photoAccess == PhotoAccess.FULL -> "Take a screenshot while the overlay is open to capture and solve your board."
-                photoAccess == PhotoAccess.SELECTED -> "This shortcut needs access to all photos to detect new screenshots. You’ve allowed selected photos only. You can still tap Capture."
-                else -> "To use this shortcut, allow access to all photos so we can detect new screenshots. Capture works without photo access."
+                photoAccess == PhotoAccess.SELECTED -> "To detect new screenshots, PAD Solver needs access to all photos. You’ve allowed selected photos only. You can still tap Capture."
+                else -> "Allow access to all photos so PAD Solver can detect new screenshots. Capture works without photo access."
             },
             style = MaterialTheme.typography.bodySmall,
         )
