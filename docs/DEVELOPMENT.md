@@ -23,9 +23,11 @@ Open a pull request from the feature branch into `main`. Related cleanup and its
 
 `.github/workflows/android.yml` runs on pull requests into `main`, pushes to `main`, and manual workflow dispatches. It runs JVM tests, Android lint, and debug app/test APK builds, then the complete instrumentation suite on API 26 and API 36 emulators. API 26 protects the minimum supported Android version; API 36 adds a recent runtime. Continue checking the physical phone for its current Android version, real screen capture, permissions, and overlay behavior.
 
-CI uses the committed Gradle wrapper and fixed action revisions with read-only repository permissions. Builds from this repository can populate Gradle caches for later runs; fork PRs only read caches. New pushes cancel outdated checks on the same PR. Test and lint reports are retained as downloadable workflow artifacts for 14 days, including failed runs. The jobs run their test tasks directly; tests are never skipped to produce a passing check.
+CI uses the committed Gradle wrapper and fixed action revisions with read-only repository permissions. Builds from this repository can populate Gradle caches for later runs; fork PRs only read caches. APK builds enable Gradle's task-output cache so unchanged compilation work can be reused across runs. Device jobs build the app and test APKs before starting the emulator, avoiding CPU contention during compilation. JVM tests and lint run separately without task-output caching, and both emulators still run the complete instrumentation suite. New pushes cancel outdated checks on the same PR. Test and lint reports are retained as downloadable workflow artifacts for 14 days, including failed runs. The jobs run their test tasks directly; tests are never skipped to produce a passing check.
 
 After the first successful workflow run, repository branch protection can require `Unit tests, lint and build`, `Device tests (API 26)`, and `Device tests (API 36)` before merging. Adding a workflow alone does not configure branch protection.
+
+GitHub currently rejects branch-protection and ruleset requests for this private repository with HTTP 403: "Upgrade to GitHub Pro or make this repository public to enable this feature." Keep the repository private unless its owner explicitly requests otherwise. Once the account supports private-repository protection, require all three checks on `main`, require the branch to be up to date, and apply the checks to administrators too.
 
 ## Regression coverage
 
