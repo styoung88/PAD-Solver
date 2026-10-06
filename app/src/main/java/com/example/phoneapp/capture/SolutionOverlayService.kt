@@ -335,14 +335,14 @@ class SolutionOverlayService : Service() {
     private fun startAsForeground() {
         val channel = "pad_overlay"
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(
-            NotificationChannel(channel, "PAD floating toolbar", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(channel, "Floating toolbar", NotificationManager.IMPORTANCE_LOW),
         )
         val close = PendingIntent.getService(this, 43,
             Intent(this, SolutionOverlayService::class.java).setAction(ACTION_HIDE),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("PAD floating toolbar")
+            .setContentTitle("Floating toolbar")
             .setContentText("Ready to process your screenshots or capture a board.")
             .setOngoing(true)
             .addAction(R.drawable.ic_notification, "Close overlay", close)

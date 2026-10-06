@@ -43,13 +43,12 @@ internal class OverlayControlsView(
         elevation = resources.dpToPx(8).toFloat()
         val header = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(TextView(context).apply {
-            text = "PAD"
+            text = "⋮⋮"
             gravity = Gravity.CENTER_VERTICAL
-            textSize = 11f
-            letterSpacing = 0.12f
+            textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(accent)
-            contentDescription = "PAD Solver toolbar drag handle"
+            contentDescription = "Toolbar drag handle"
             var startX = 0f
             var startY = 0f
             var previousX = 0f
