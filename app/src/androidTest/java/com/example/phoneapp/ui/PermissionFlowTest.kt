@@ -145,7 +145,8 @@ class PermissionFlowTest {
             ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java).setData(Uri.fromFile(image))).use {
                 awaitText("Solve settings").performClick()
                 awaitText("Apply and solve").performClick()
-                awaitText("Show route in PAD", scroll = false).performClick()
+                // Software rendering and shared CI CPUs need more time for the real solve.
+                awaitText("Show route in PAD", scroll = false, timeoutMillis = 60_000).performClick()
                 assertNotNull(device.wait(Until.findObject(By.desc("Capture board")), timeout))
                 assertTrue(SolutionOverlayService.enabled)
                 assertFalse(ScreenCaptureService.active)
@@ -153,10 +154,10 @@ class PermissionFlowTest {
         } finally { image.delete() }
     }
 
-    private fun awaitText(text: String, scroll: Boolean = true, clickable: Boolean = true): SemanticsNodeInteraction {
+    private fun awaitText(text: String, scroll: Boolean = true, clickable: Boolean = true, timeoutMillis: Long = timeout): SemanticsNodeInteraction {
         val selector = if (clickable) hasText(text) and hasClickAction() else hasText(text)
         try {
-            compose.waitUntil(timeoutMillis = timeout) {
+            compose.waitUntil(timeoutMillis = timeoutMillis) {
                 compose.onAllNodes(selector).fetchSemanticsNodes().isNotEmpty()
             }
         } catch (error: androidx.compose.ui.test.ComposeTimeoutException) {
