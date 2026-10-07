@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.PointF
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Rect
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.capture.BoardRecognition
@@ -78,7 +79,7 @@ class RouteArrowRendererScreenshotTest {
                 12, 6, 7, 13, 12, 18, 19, 13, 7, 1, 2, 1, 0, 6, 12, 13, 14, 8, 2),
             listOf(0, 1, 7, 6, 0, 1, 7, 6, 0, 1, 7, 6, 0),
         ).map { route -> route.map { BoardPosition(it / 6, it % 6) } }
-        val colors = listOf("WDDWWF", "GGWGGG", "GGDFLH", "WWWLLH", "LLWLWH").joinToString("")
+        val colors = listOf("DWFFHG", "DLHFLD", "HGWLHD", "HFLDFF", "WWDLGD").joinToString("")
         for ((fixture, route) in routes.withIndex()) {
             val bounds = RectF(0f, 0f, 1080f, 900f)
             val prepared = RouteArrowRenderer.prepareRoute(route, 6, 5)
@@ -134,16 +135,68 @@ class RouteArrowRendererScreenshotTest {
         }
     }
 
+    @Test
+    fun unlabeledBadgesShareTheOrbCenterWhenTheRouteReturnsToItsStart() {
+        val overlay = Bitmap.createBitmap(600, 500, Bitmap.Config.ARGB_8888)
+        try {
+            RouteArrowRenderer.draw(Canvas(overlay), listOf(BoardPosition(2, 2), BoardPosition(2, 3),
+                BoardPosition(3, 3), BoardPosition(3, 2), BoardPosition(2, 2)), RectF(0f, 0f, 600f, 500f), 6, 5)
+            assertMarkerCenter(overlay, PointF(250f, 250f), START_BADGE_COLOR, 1f)
+            assertMarkerCenter(overlay, PointF(250f, 250f), END_BADGE_COLOR, 1f)
+        } finally {
+            overlay.recycle()
+        }
+    }
+
+    @Test
+    fun latestScreenshotBadgesStayCenteredAtOppositeEndsOfTheBoard() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val screenshot = checkNotNull(instrumentation.context.assets.open("pad-endpoint-alignment-reference.jpg")
+            .use(BitmapFactory::decodeStream))
+        val overlay = Bitmap.createBitmap(screenshot.width, screenshot.height, Bitmap.Config.ARGB_8888)
+        try {
+            val recognition = PadBoardRecognizer().recognize(screenshot) as BoardRecognition.Recognized
+            val route = listOf(29, 28, 27, 21, 15, 9, 3).map { BoardPosition(it / 6, it % 6) }
+            RouteArrowRenderer.draw(Canvas(overlay), route, recognition.boardBounds, 6, 5)
+            assertMarkerCenter(overlay, PointF(526.2f, 1200f), START_BADGE_COLOR, 4f)
+            assertMarkerCenter(overlay, PointF(334.8f, 822f), END_BADGE_COLOR, 4f)
+            val composite = screenshot.copy(Bitmap.Config.ARGB_8888, true)
+            try {
+                Canvas(composite).drawBitmap(overlay, 0f, 0f, null)
+                File(instrumentation.targetContext.getExternalFilesDir(null), "route-endpoint-alignment.png")
+                    .outputStream().use { assertTrue(composite.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            } finally {
+                composite.recycle()
+            }
+        } finally {
+            overlay.recycle()
+            screenshot.recycle()
+        }
+    }
+
     private fun exportGameOverlay(route: List<BoardPosition>, prepared: RouteArrowRenderer.PreparedRoute) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val screenshot = checkNotNull(instrumentation.context.assets.open(REFERENCE_SCREENSHOT).use(BitmapFactory::decodeStream))
+        val screenshot = checkNotNull(instrumentation.context.assets.open(COLOR_VARIANCE_SCREENSHOT).use(BitmapFactory::decodeStream))
         var composite: Bitmap? = null
         try {
             val recognized = PadBoardRecognizer().recognize(screenshot) as BoardRecognition.Recognized
+            val expectedColors = OrbColor.attackingColors.toSet() + OrbColor.HEART
+            assertEquals("The overlay fixture must exercise all six orb colors", expectedColors,
+                recognized.board.orbs.map { it.color }.toSet())
+            assertEquals("The dense route must pass over all six orb colors", expectedColors,
+                route.map { recognized.board[it].color }.toSet())
             composite = screenshot.copy(Bitmap.Config.ARGB_8888, true)
             RouteArrowRenderer.draw(Canvas(composite), route, recognized.boardBounds, 6, 5, preparedRoute = prepared)
-            File(instrumentation.targetContext.getExternalFilesDir(null), "route-overlay.png").outputStream().use {
+            File(instrumentation.targetContext.getExternalFilesDir(null), "route-overlay-vivid.png").outputStream().use {
                 assertTrue(composite.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+            val bounds = Rect().also { recognized.boardBounds.round(it) }
+            val boardPreview = Bitmap.createBitmap(composite, bounds.left, bounds.top, bounds.width(), bounds.height())
+            try {
+                File(instrumentation.targetContext.getExternalFilesDir(null), "route-overlay-board-vivid.png")
+                    .outputStream().use { assertTrue(boardPreview.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            } finally {
+                boardPreview.recycle()
             }
         } finally {
             composite?.recycle()
@@ -151,28 +204,37 @@ class RouteArrowRendererScreenshotTest {
         }
     }
 
-    private fun assertMarkerCenter(bitmap: Bitmap, expected: PointF, color: Int) {
-        val radius = bitmap.width.toFloat() / Board.DEFAULT_COLUMNS * 0.20f
-        val points = listOf(PointF(expected.x - radius, expected.y), PointF(expected.x + radius, expected.y),
-            PointF(expected.x, expected.y - radius), PointF(expected.x, expected.y + radius))
-        val visibleSides = points.count { point ->
-            val tolerance = CENTER_TOLERANCE_PX.roundToInt()
-            (-tolerance..tolerance).any { dx -> (-tolerance..tolerance).any { dy ->
-                val x = (point.x + dx).roundToInt()
-                val y = (point.y + dy).roundToInt()
-                x in 0 until bitmap.width && y in 0 until bitmap.height && bitmap.getPixel(x, y) == color
-            } }
+    private fun assertMarkerCenter(bitmap: Bitmap, expected: PointF, color: Int, tolerance: Float = CENTER_TOLERANCE_PX) {
+        val radius = bitmap.width.toFloat() / Board.DEFAULT_COLUMNS * 0.30f
+        var minX = bitmap.width
+        var minY = bitmap.height
+        var maxX = -1
+        var maxY = -1
+        for (y in (expected.y - radius).roundToInt()..(expected.y + radius).roundToInt()) {
+            for (x in (expected.x - radius).roundToInt()..(expected.x + radius).roundToInt()) {
+                if (x in 0 until bitmap.width && y in 0 until bitmap.height && bitmap.getPixel(x, y) == color) {
+                    minX = minOf(minX, x)
+                    minY = minOf(minY, y)
+                    maxX = maxOf(maxX, x)
+                    maxY = maxOf(maxY, y)
+                }
+            }
         }
-        // The departure/arrival leg can cross one side of a hollow marker.
-        assertTrue("Marker must surround the measured orb center $expected ($visibleSides visible sides)", visibleSides >= 3)
+        assertTrue("Endpoint badge must remain visible", maxX >= minX && maxY >= minY)
+        assertEquals("Badge horizontal center", expected.x, (minX + maxX + 1) / 2f, tolerance)
+        assertEquals("Badge vertical center", expected.y, (minY + maxY + 1) / 2f, tolerance)
     }
 
     private companion object {
         const val REFERENCE_SCREENSHOT = "Screenshot_20261004-003057.png"
+        const val COLOR_VARIANCE_SCREENSHOT = "pad-color-variance-reference.jpg"
         const val REFERENCE_HEIGHT = 2142f
         const val START_BADGE_COLOR = 0xFF4CAF50.toInt()
         const val END_BADGE_COLOR = 0xFFEF4444.toInt()
         const val CENTER_TOLERANCE_PX = 6f
-        val MEASURED_ROW_CENTERS = floatArrayOf(1377f, 1537f, 1697f, 1857f, 2017f)
+        // Midpoints of the visible top/bottom orb rims at x=80 in the source:
+        // 1304..1451, 1461..1608, 1618..1766, 1775..1923, 1933..2080.
+        // Vertical pitch is about 157.5px, independently of the 160px column pitch.
+        val MEASURED_ROW_CENTERS = floatArrayOf(1377.5f, 1534.5f, 1692f, 1849f, 2006.5f)
     }
 }

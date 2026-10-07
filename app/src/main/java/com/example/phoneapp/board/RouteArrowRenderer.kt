@@ -14,7 +14,7 @@ object RouteArrowRenderer {
     private const val OUTLINE_COLOR = 0xFF101824.toInt()
     private const val START_BADGE_COLOR = 0xFF4CAF50.toInt()
     private const val END_BADGE_COLOR = 0xFFEF4444.toInt()
-    private val COLORS = intArrayOf(0xFF56F0D6.toInt(), 0xFF62C8FF.toInt(), 0xFFC8A2FF.toInt(), 0xFFFF92BA.toInt())
+    private val VIVID_COLORS = intArrayOf(0xFF00E5B5.toInt(), 0xFF00B8FF.toInt(), 0xFFAC69FF.toInt(), 0xFFFF3988.toInt())
 
     class PreparedRoute internal constructor(
         internal val path: List<BoardPosition>,
@@ -61,10 +61,11 @@ object RouteArrowRenderer {
         }
         fun stroke(trace: Path, color: Int, spacing: Float = 0.18f) {
             // Shrink crowded lanes together with their casing rather than let outlines merge.
-            val width = cellSize * minOf(0.044f, spacing * 0.28f)
+            val width = cellSize * minOf(0.056f, spacing * 0.31f)
+            val casing = width
             paint.style = Paint.Style.STROKE
             paint.color = OUTLINE_COLOR
-            paint.strokeWidth = width + cellSize * minOf(0.042f, spacing * 0.25f)
+            paint.strokeWidth = width + casing
             canvas.drawPath(trace, paint)
             paint.color = color
             paint.strokeWidth = width
@@ -86,36 +87,21 @@ object RouteArrowRenderer {
         val sharedEndpoint = path.first() == path.last()
         val startRadius = cellSize * if (sharedEndpoint) 0.16f else 0.20f
         val endRadius = cellSize * if (sharedEndpoint) 0.24f else 0.20f
-        val samples = geometry.layout.visits.flatMap { curve -> (0..20).map { screen(curve.point(it / 20f)) } } +
-            moves.flatMap { move -> (0..10).map { screen(move.from + (move.to - move.from) * (it / 10f)) } }
-        fun labelPosition(center: Point, otherLabel: Point? = null): Point =
-            listOf(Point(-0.32f, -0.32f), Point(0.32f, -0.32f), Point(-0.32f, 0.32f), Point(0.32f, 0.32f))
-                .map { center + it * cellSize }
-                .maxBy { candidate ->
-                    minOf(samples.minOfOrNull { it.distance(candidate) } ?: cellSize,
-                        otherLabel?.distance(candidate)?.minus(cellSize * 0.20f) ?: cellSize)
-                }
-        val startLabel = labelPosition(start)
-        val endLabel = labelPosition(end, startLabel)
-
-        fun endpoint(center: Point, label: Point, radius: Float, color: Int, square: Boolean) {
-            val direction = (label - center) * (1f / label.distance(center))
-            stroke(Path().apply {
-                val from = center + direction * radius
-                moveTo(from.x, from.y)
-                lineTo(label.x, label.y)
-            }, color)
-            val shape = Path().apply {
-                if (square) addRoundRect(center.x - radius, center.y - radius, center.x + radius, center.y + radius,
-                    cellSize * 0.035f, cellSize * 0.035f, Path.Direction.CW)
-                else addCircle(center.x, center.y, radius, Path.Direction.CW)
+        fun badge(center: Point, radius: Float, color: Int, square: Boolean) {
+            paint.style = Paint.Style.FILL
+            fun fill(size: Float, fillColor: Int) {
+                paint.color = fillColor
+                if (square) canvas.drawRoundRect(center.x - size, center.y - size, center.x + size, center.y + size,
+                    cellSize * 0.035f, cellSize * 0.035f, paint)
+                else canvas.drawCircle(center.x, center.y, size, paint)
             }
-            stroke(shape, color)
+            fill(radius + cellSize * 0.025f, OUTLINE_COLOR)
+            fill(radius, color)
         }
-        // Hollow endpoint markers sit beneath the route, so revisits keep their
-        // natural flow through them. Letter badges sit in the clearest nearby corner.
-        endpoint(start, startLabel, startRadius, START_BADGE_COLOR, false)
-        endpoint(end, endLabel, endRadius, END_BADGE_COLOR, true)
+        // Badges share the exact endpoint centers. Draw beneath the route so
+        // revisits can flow across them, including nested badges in a shared cell.
+        badge(end, endRadius, END_BADGE_COLOR, true)
+        badge(start, startRadius, START_BADGE_COLOR, false)
         for (index in geometry.layout.visits.indices) {
             val color = routeColor(index.coerceAtMost(moves.lastIndex), moves.size)
             val spacing = minOf(moves.getOrNull(index - 1)?.laneSpacing ?: 0.18f,
@@ -159,29 +145,14 @@ object RouteArrowRenderer {
             paint.color = color
             canvas.drawPath(arrow, paint)
         }
-        fun badge(center: Point, label: String, color: Int, square: Boolean) {
-            val radius = cellSize * 0.115f
-            val casing = radius + cellSize * 0.022f
-            paint.style = Paint.Style.FILL
-            fun fill(size: Float, fillColor: Int) {
-                paint.color = fillColor
-                if (square) canvas.drawRoundRect(center.x - size, center.y - size, center.x + size, center.y + size,
-                    cellSize * 0.025f, cellSize * 0.025f, paint)
-                else canvas.drawCircle(center.x, center.y, size, paint)
-            }
-            fill(casing, OUTLINE_COLOR)
-            fill(radius, color)
-            drawText(label, center, radius * 1.35f)
-        }
-        badge(startLabel, "S", START_BADGE_COLOR, false)
-        badge(endLabel, "E", END_BADGE_COLOR, true)
     }
 
     private fun routeColor(step: Int, count: Int): Int {
-        val position = if (count <= 1) 0f else step.toFloat() / (count - 1) * COLORS.lastIndex
-        val index = position.toInt().coerceIn(0, COLORS.lastIndex)
-        val from = COLORS[index]
-        val to = COLORS[minOf(index + 1, COLORS.lastIndex)]
+        val colors = VIVID_COLORS
+        val position = if (count <= 1) 0f else step.toFloat() / (count - 1) * colors.lastIndex
+        val index = position.toInt().coerceIn(0, colors.lastIndex)
+        val from = colors[index]
+        val to = colors[minOf(index + 1, colors.lastIndex)]
         val fraction = position - index
         fun blend(a: Int, b: Int) = (a + (b - a) * fraction).toInt()
         return Color.rgb(blend(Color.red(from), Color.red(to)),

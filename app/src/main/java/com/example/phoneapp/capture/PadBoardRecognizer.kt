@@ -8,6 +8,7 @@ import com.example.phoneapp.board.Orb
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 sealed interface BoardRecognition {
     data class Recognized(
@@ -39,14 +40,15 @@ class PadBoardRecognizer {
         val maxCenterY = bitmap.height - boardHeight / 2f - bitmap.height * MAX_CENTER_Y_MARGIN
         val coarseYStep = (bitmap.height * CENTER_Y_STEP).coerceAtLeast(1f)
 
-        fun candidateAt(centerY: Float): Candidate {
+        fun candidateAt(centerY: Float, cellHeight: Float = cellSize): Candidate {
             val left = 0f
-            val top = centerY - boardHeight / 2f
+            val height = cellHeight * Board.DEFAULT_ROWS
+            val top = centerY - height / 2f
             val samples = ArrayList<OrbSample>(Board.DEFAULT_COLUMNS * Board.DEFAULT_ROWS)
             for (row in 0 until Board.DEFAULT_ROWS) {
                 for (column in 0 until Board.DEFAULT_COLUMNS) {
                     val x = left + (column + 0.5f) * cellSize
-                    val y = top + (row + 0.5f) * cellSize
+                    val y = top + (row + 0.5f) * cellHeight
                     samples += sampleOrbColor(colorMap, x, y, cellSize)
                 }
             }
@@ -57,7 +59,7 @@ class PadBoardRecognizer {
             val centerPenalty = abs(centerY - bitmap.height * PREFERRED_CENTER_Y) / bitmap.height
             val score = recognized + variety * VARIETY_BONUS + averageColorSupport * COLOR_SUPPORT_WEIGHT -
                 centerPenalty * CENTER_PENALTY
-            return Candidate(left, top, boardWidth, boardHeight, colors, recognized, averageColorSupport, score)
+            return Candidate(left, top, boardWidth, height, colors, recognized, averageColorSupport, score)
         }
 
         // Coarse vertical scan locates the board, followed by a pixel-level
@@ -80,7 +82,18 @@ class PadBoardRecognizer {
             refinedCenterY += 1f
         }
 
-        val candidate = best ?: return BoardRecognition.Uncertain(0)
+        val colorCandidate = best ?: return BoardRecognition.Uncertain(0)
+        // Color support locates the grid but cannot distinguish small spacing
+        // changes inside an orb. Fit the four dark row gaps independently; a
+        // resized screenshot can have a different vertical and horizontal pitch.
+        val fittedRows = fitRowGaps(bitmap, colorCandidate)
+        val candidate = fittedRows?.let { (top, pitch) ->
+            candidateAt(top + pitch * Board.DEFAULT_ROWS / 2f, pitch).takeIf {
+                it.recognized == MIN_RECOGNIZED_CELLS &&
+                    it.averageColorSupport >= MIN_AVERAGE_COLOR_SUPPORT &&
+                    it.averageColorSupport >= colorCandidate.averageColorSupport - 0.10f
+            }
+        } ?: colorCandidate
         if (candidate.recognized < MIN_RECOGNIZED_CELLS ||
             candidate.averageColorSupport < MIN_AVERAGE_COLOR_SUPPORT
         ) {
@@ -117,6 +130,55 @@ class PadBoardRecognizer {
             captureWidth = bitmap.width,
             captureHeight = bitmap.height,
         )
+    }
+
+    private fun fitRowGaps(bitmap: Bitmap, candidate: Candidate): Pair<Float, Float>? {
+        val cellWidth = candidate.width / Board.DEFAULT_COLUMNS
+        val gaps = FloatArray(Board.DEFAULT_ROWS - 1)
+        fun brightness(x: Float, y: Float): Float {
+            val pixel = bitmap.getPixel(x.roundToInt().coerceIn(0, bitmap.width - 1),
+                y.roundToInt().coerceIn(0, bitmap.height - 1))
+            return (0.2126f * Color.red(pixel) + 0.7152f * Color.green(pixel) +
+                0.0722f * Color.blue(pixel)) / 255f
+        }
+        for (row in 1 until Board.DEFAULT_ROWS) {
+            val expected = candidate.top + row * candidate.height / Board.DEFAULT_ROWS
+            var bestContrast = 0f
+            val searchRadius = cellWidth * 0.12f
+            val band = ArrayList<Pair<Int, Float>>()
+            for (y in (expected - searchRadius).roundToInt()..(expected + searchRadius).roundToInt()) {
+                val contrasts = FloatArray(Board.DEFAULT_COLUMNS) { column ->
+                    val centerX = candidate.left + (column + 0.5f) * cellWidth
+                    var contrast = 0f
+                    for (offset in -1..1) {
+                        val x = centerX + offset * cellWidth * 0.10f
+                        val rim = (brightness(x, y - cellWidth * 0.09f) +
+                            brightness(x, y + cellWidth * 0.09f)) / 2f
+                        contrast += rim - brightness(x, y.toFloat())
+                    }
+                    contrast / 3f
+                }.apply { sort() }
+                // The median resists route strokes and enhanced/locked orb art.
+                val contrast = (contrasts[2] + contrasts[3]) / 2f
+                band += y to contrast
+                bestContrast = maxOf(bestContrast, contrast)
+            }
+            if (bestContrast < 0.08f) return null
+            // Center the dark band rather than choosing one noisy pixel on an
+            // orb's brighter upper rim, which biases later rows upward.
+            val strongest = band.filter { it.second >= bestContrast * 0.80f }
+            gaps[row - 1] = strongest.sumOf { (it.first * it.second).toDouble() }.toFloat() /
+                strongest.sumOf { it.second.toDouble() }.toFloat()
+        }
+        // Least-squares fit: gap index 1..4 = grid top + index * row pitch.
+        val meanY = gaps.average().toFloat()
+        val pitch = gaps.indices.sumOf { ((it + 1 - 2.5f) * (gaps[it] - meanY)).toDouble() }.toFloat() / 5f
+        val top = meanY - 2.5f * pitch
+        if (pitch !in cellWidth * 0.96f..cellWidth * 1.04f || top < 0f ||
+            top + pitch * Board.DEFAULT_ROWS > bitmap.height ||
+            gaps.indices.any { abs(gaps[it] - (top + (it + 1) * pitch)) > cellWidth * 0.035f }
+        ) return null
+        return top to pitch
     }
 
     private fun sampleOrbColor(

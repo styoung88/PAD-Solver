@@ -390,7 +390,7 @@ fun SolutionScreen(
         }
         BoardCaption(
             if (unmetRequirements.isEmpty()) "Suggested route" else "Captured board",
-            if (unmetRequirements.isEmpty()) "Start at S, follow numbers to E" else "Adjust settings to try another route",
+            if (unmetRequirements.isEmpty()) "Start at green, follow numbers to red" else "Adjust settings to try another route",
         )
         CapturedOrbBoard(recognition, if (unmetRequirements.isEmpty()) solution.path else emptyList())
     }

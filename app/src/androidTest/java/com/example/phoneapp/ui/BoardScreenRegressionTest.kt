@@ -135,6 +135,8 @@ class BoardScreenRegressionTest {
             }
         }
         compose.onNodeWithText("Open drawer").performClick()
+        compose.onNodeWithText("Path style").assertDoesNotExist()
+        compose.onNodeWithText("Route appearance").assertDoesNotExist()
         compose.onNodeWithText("Close").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Apply and solve").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, applies) }
