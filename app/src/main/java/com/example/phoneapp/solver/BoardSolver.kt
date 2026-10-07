@@ -1,6 +1,7 @@
 package com.example.phoneapp.solver
 
 import com.example.phoneapp.board.Board
+import com.example.phoneapp.board.BoardSize
 import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardAnalyzer
 import com.example.phoneapp.board.BoardPosition
@@ -26,6 +27,13 @@ data class SolveOptions(
         require(maxOrbMoves >= 0)
         require(beamWidth > 0)
     }
+
+    companion object {
+        fun forBoard(board: Board, goal: SolveGoal = MaximizeCombos): SolveOptions = SolveOptions(
+            maxOrbMoves = BoardSize.of(board.columns, board.rows)?.maxOrbMoves ?: 40,
+            goal = goal,
+        )
+    }
 }
 
 data class BoardSolution(
@@ -48,7 +56,7 @@ data class BoardSolution(
 
 /** Bounded drag-path search with separate candidate heuristics and final route ranking. */
 class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Default) {
-    suspend fun solve(board: Board, options: SolveOptions = SolveOptions()): BoardSolution =
+    suspend fun solve(board: Board, options: SolveOptions = SolveOptions.forBoard(board)): BoardSolution =
         withContext(dispatcher) { search(board, options) }
 
     private suspend fun search(board: Board, options: SolveOptions): BoardSolution {

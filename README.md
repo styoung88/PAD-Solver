@@ -1,6 +1,6 @@
 # Android-solver
 
-A native Android app that captures and solves a standard Puzzles & Dragons board. It uses Kotlin and Jetpack Compose and targets the newest installed Android API.
+A native Android app that captures and solves 5×4, 6×5, and 7×6 Puzzles & Dragons boards. It uses Kotlin and Jetpack Compose and targets the newest installed Android API.
 
 ## Requirements
 
@@ -15,7 +15,7 @@ Install SDK Platform 37 and Android SDK Build Tools 36.0.0 from Android Studio's
 
 1. Tap **Capture board** and approve the screen-capture and notification prompts.
 2. Switch to Puzzles & Dragons, open the notification shade, and tap **Capture board** in the ongoing capture notification.
-3. Review the detected 6×5 board, then solve it.
+3. Review the detected board, then solve it. Board size is detected automatically; choose a size in Solve settings to override detection and reread the screenshot.
 4. Tap **Show route in PAD**. If asked, grant draw-over-apps access, then tap **Show route in PAD** again to display the numbered, touch-through route overlay. No game input is automated.
 
 Each screen-capture session requires system approval. Notifications are needed for the capture action on Android 13 and later. Captured images are kept in the app's private storage and are excluded from Android backup. They are not sent over the network.
@@ -24,7 +24,7 @@ The recognizer supports the six ordinary orb colors and hearts, and detects enha
 
 The solver uses a bounded beam search with deterministic gravity cascades and no random skyfall. Combo minimums and attacking-color pattern requirements must be met first; qualifying routes maximize the selected color's board-damage estimate, or total combos when no color is selected. A pattern requirement means at least one match, rather than maximizing pattern count. Score ties prefer fewer moves, then fewer turns. Pattern progress guides the search frontier but does not rank final solutions. Requests proven impossible by orb inventory or board space return immediately for adjustment.
 
-Color-focused solves run two bounded searches concurrently, independently of the selected combo minimum, then share their candidates. An additional search targets the requested requirements if needed. Equal results remain deterministic across workers. The solver does not use the in-game timer and does not guarantee a global optimum.
+Color-focused solves run two bounded searches concurrently, independently of the selected combo minimum, then share their candidates. An additional search targets the requested requirements if needed. Equal results remain deterministic across workers. Search limits are 30 moves for 5×4, 40 for 6×5, and 50 for 7×6. Row patterns span the full board width. The solver does not use the in-game timer and does not guarantee a global optimum.
 
 ## Project structure
 

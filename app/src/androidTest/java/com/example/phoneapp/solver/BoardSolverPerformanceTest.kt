@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.phoneapp.board.Board
+import com.example.phoneapp.board.BoardSize
 import com.example.phoneapp.board.Orb
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
@@ -23,12 +24,17 @@ class BoardSolverPerformanceTest {
     @Test fun fireVdp() = compare("fire_vdp", twoColorBoard(), SolveSettings(OrbColor.FIRE, matchPatternFocus = MatchPattern.VDP))
     @Test fun waterDamage() = compare("water_damage", woodBoard(), SolveSettings(OrbColor.WATER))
     @Test fun combosOnlyControl() = compare("combos_control", woodBoard(), SolveSettings())
+    @Test fun smallBoard() = compare("5x4_30_moves", sizedBoard(BoardSize.SMALL), SolveSettings(OrbColor.FIRE))
+    @Test fun largeBoard() = compare("7x6_50_moves", sizedBoard(BoardSize.LARGE), SolveSettings(OrbColor.FIRE))
+
+    private fun sizedBoard(size: BoardSize): Board = Board(size.columns, size.rows,
+        List(size.cellCount) { Orb(OrbColor.entries[it % 6]) }.shuffled(Random(37)))
 
     private fun compare(name: String, board: Board, settings: SolveSettings): Unit = runBlocking {
         // The same algorithm and cache run on one worker or the default CPU pool.
         // This isolates parallel execution without a benchmark switch in product settings.
         val solvers = listOf(BoardSolver(Dispatchers.Default.limitedParallelism(1)), BoardSolver())
-        val options = SolveOptions(goal = settings.toGoal())
+        val options = SolveOptions.forBoard(board, settings.toGoal())
         val expected = solvers[0].solve(board, options)
         assertEquals(expected, solvers[1].solve(board, options))
         val samples = List(2) { mutableListOf<Long>() }

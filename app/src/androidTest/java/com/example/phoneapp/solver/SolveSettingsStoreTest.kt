@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.board.OrbColor
+import com.example.phoneapp.board.BoardSize
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -58,7 +59,7 @@ class SolveSettingsStoreTest {
     fun separateReadersSeeSavedSettingsAndClearedOptions() {
         val writer = SolveSettingsStore(preferences)
         val reader = SolveSettingsStore(preferences)
-        val settings = SolveSettings(OrbColor.FIRE, 7, MatchPattern.CROSS)
+        val settings = SolveSettings(OrbColor.FIRE, 7, MatchPattern.CROSS, BoardSize.LARGE)
         writer.save(settings)
         assertEquals(settings, reader.load())
         preferences.edit().putBoolean("unrelated", true).commit()
@@ -67,6 +68,13 @@ class SolveSettingsStoreTest {
         assertFalse(preferences.contains("preferred_orb_color"))
         assertFalse(preferences.contains("target_combo_count"))
         assertFalse(preferences.contains("match_pattern"))
+        assertFalse(preferences.contains("board_size_override"))
         assertEquals(true, preferences.getBoolean("unrelated", false))
+    }
+
+    @Test
+    fun invalidBoardSizeFallsBackToAutomaticWithoutLosingGoals() {
+        preferences.edit().putString("board_size_override", "8x7").putInt("target_combo_count", 14).commit()
+        assertEquals(SolveSettings(targetComboCount = 14), SolveSettingsStore(preferences).load())
     }
 }

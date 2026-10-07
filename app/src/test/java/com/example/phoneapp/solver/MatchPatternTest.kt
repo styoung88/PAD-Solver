@@ -14,12 +14,25 @@ import org.junit.Test
 
 class MatchPatternTest {
     @Test
-    fun rowsRequireSixContiguousCellsAndCountEachCompleteRow() {
+    fun rowsRequireTheCompleteBoardWidthAndCountEachCompleteRow() {
         assertEquals(1, count(MatchPattern.ROW, (0..5).map { 2 to it }))
         assertEquals(0, count(MatchPattern.ROW, (0..4).map { 2 to it }))
         assertEquals(0, count(MatchPattern.ROW, listOf(0, 1, 2, 4, 5, 6).map { 2 to it }))
         assertEquals(0, count(MatchPattern.ROW, (0..5).map { it to 2 }))
         assertEquals(2, count(MatchPattern.ROW, (1..2).flatMap { row -> (0..5).map { row to it } }))
+        for (width in listOf(5, 6, 7)) {
+            val fullRow = board("F".repeat(width), "U".repeat(width))
+            val full = BoardAnalyzer.resolveCascades(fullRow)
+            assertEquals(width, full.columns)
+            assertEquals(2, full.rows)
+            assertEquals(1, MatchPattern.ROW.countMatches(full))
+            assertTrue(MatchPattern.ROW.canForm(fullRow))
+            assertTrue(MatchPattern.ROW.potentialScore(fullRow) > 0)
+            val partialRow = board("F".repeat(width - 1) + "U", "U".repeat(width))
+            assertEquals(0, MatchPattern.ROW.countMatches(BoardAnalyzer.resolveCascades(partialRow)))
+            assertFalse(MatchPattern.ROW.canForm(partialRow))
+            assertEquals(0, MatchPattern.ROW.potentialScore(partialRow))
+        }
     }
 
     @Test
@@ -56,7 +69,7 @@ class MatchPatternTest {
         assertFalse(MatchPattern.VDP.canForm(board("FFFFFFFFF"), OrbColor.FIRE))
         assertTrue(MatchPattern.VDP.canForm(board("FFF", "FFF", "FFF"), OrbColor.FIRE))
         assertFalse(MatchPattern.VDP.canForm(board("FFF", "FFF", "FFU"), OrbColor.FIRE))
-        assertFalse(MatchPattern.ROW.canForm(board("FFFFF")))
+        assertFalse(MatchPattern.ROW.canForm(board("FFFFU")))
         val input = board("FFFUUU", "UWWWWU")
         assertEquals(MatchPattern.TPA.potentialScore(input, OrbColor.WATER), MatchPattern.TPA.potentialScore(input))
     }

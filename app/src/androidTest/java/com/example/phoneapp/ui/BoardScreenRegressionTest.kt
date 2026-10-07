@@ -12,6 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -21,6 +25,7 @@ import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardAnalyzer
 import com.example.phoneapp.board.BoardPosition
+import com.example.phoneapp.board.BoardSize
 import com.example.phoneapp.board.Orb
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.capture.BoardRecognition
@@ -44,6 +49,40 @@ class BoardScreenRegressionTest {
         board = Board(orbs = List(30) { Orb(OrbColor.WOOD) }),
         boardBounds = RectF(0f, 300f, 600f, 800f), captureWidth = 600, captureHeight = 1000,
     )
+
+    @Test
+    fun previewCaptionTracksTheDetectedBoardSize() {
+        val current = mutableStateOf(recognized)
+        compose.setContent { MaterialTheme { BoardPreviewScreen(current.value, false, SolveSettings(), {}, {}) } }
+        for (size in BoardSize.entries) {
+            compose.runOnIdle {
+                current.value = recognized.copy(board = Board(size.columns, size.rows,
+                    List(size.cellCount) { Orb(OrbColor.WOOD) }))
+            }
+            compose.onNodeWithText("Check the detected ${size.displayName} layout").assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun smallBoardKeepsSavedTargetAndExplainsItsLimit() {
+        val settings = mutableStateOf(SolveSettings(targetComboCount = 10))
+        val small = Board(5, 4, List(20) { Orb(OrbColor.FIRE) })
+        compose.setContent {
+            MaterialTheme {
+                SolveSettingsDrawer(settings.value, false, { settings.value = it }, "Apply and solve", {}, board = small) { open ->
+                    Button(onClick = open) { Text("Open drawer") }
+                }
+            }
+        }
+        compose.onNodeWithText("Open drawer").performClick()
+        compose.onNodeWithText("10 combos (exceeds board size)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("This board has enough orbs for at most 6 combos without skyfall. Choose a lower minimum or capture a new board.")
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Minimum combos").performScrollTo().performClick()
+        compose.onNode(hasText("7 combos") and hasAnyAncestor(isPopup())).assertDoesNotExist()
+        compose.onNode(hasText("6 combos") and hasAnyAncestor(isPopup())).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(6, settings.value.targetComboCount) }
+    }
 
     @Test
     fun unmetRequirementsOfferAdjustmentAndHideRouteAction() {
@@ -116,7 +155,7 @@ class BoardScreenRegressionTest {
             MaterialTheme { BoardPreviewScreen(BoardRecognition.Uncertain(0), false, SolveSettings(), {}, { resets++ }) }
         }
         compose.onNodeWithText("Board not clear enough").assertIsDisplayed()
-        compose.onNodeWithText("Solve settings").assertDoesNotExist()
+        compose.onNodeWithText("Solve settings").assertIsDisplayed()
         compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
         compose.onNodeWithText("New board").performClick()
         compose.runOnIdle { assertEquals(1, resets) }

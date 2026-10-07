@@ -152,7 +152,8 @@ class MainActivity : ComponentActivity() {
                     }
                     SolveSettingsDrawer(
                         settings = solveSettings,
-                        isSolving = isSolving,
+                        isSolving = isSolving || isReadingCapture,
+                        board = (recognition as? BoardRecognition.Recognized)?.board,
                         onSettingsChanged = ::updateSolveSettings,
                         actionLabel = when {
                             solution != null -> if (isSolving) "Recalculating route…" else "Apply and recalculate"
@@ -307,6 +308,8 @@ class MainActivity : ComponentActivity() {
             putExtra(SolutionOverlayService.EXTRA_BOARD_BOUNDS, recognized.boardBounds)
             putExtra(SolutionOverlayService.EXTRA_CAPTURE_WIDTH, recognized.captureWidth)
             putExtra(SolutionOverlayService.EXTRA_CAPTURE_HEIGHT, recognized.captureHeight)
+            putExtra(SolutionOverlayService.EXTRA_BOARD_COLUMNS, recognized.board.columns)
+            putExtra(SolutionOverlayService.EXTRA_BOARD_ROWS, recognized.board.rows)
             putExtra(SolutionOverlayService.EXTRA_PATH, result.path.map(recognized.board::indexOf).toIntArray())
         }
         ContextCompat.startForegroundService(this, overlayIntent)

@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.example.phoneapp.board.Board
+import com.example.phoneapp.board.BoardSize
 import com.example.phoneapp.board.BoardPosition
 import com.example.phoneapp.board.RouteArrowRenderer
 import com.example.phoneapp.board.OrbColor
@@ -69,6 +70,7 @@ import com.example.phoneapp.capture.PhotoAccess
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.MatchPattern
 import com.example.phoneapp.solver.SolveSettings
+import com.example.phoneapp.solver.comboCapacity
 
 @Composable
 internal fun PhotoAccessSettingsDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
@@ -130,7 +132,7 @@ internal fun HomeScreen(
         TextButton(onClick = { privacyVisible.value = true }) { Text("Privacy policy") }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Find your next route.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-            Text("Solve a 6×5 board and follow the route in PAD.",
+            Text("Solve a 5×4, 6×5, or 7×6 board and follow the route in PAD.",
                 style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
@@ -188,8 +190,9 @@ fun BoardPreviewScreen(
         ) {
             Text("Board not clear enough", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
-            Text("Move to a normal board and capture again. No board changes were made.")
+            Text("Capture a clear board, or choose its size in Solve settings and retry.")
             Spacer(Modifier.height(20.dp))
+            OutlinedButton(onClick = onOpenSettings) { Text("Solve settings") }
             Button(onClick = onNewBoard) { Text("New board") }
         }
 
@@ -216,7 +219,7 @@ fun BoardPreviewScreen(
                     }
                     if (isSolving) SolveProgressIndicator("Finding a route…")
                 }
-                BoardCaption("Review board", "Check the detected 6×5 layout")
+                BoardCaption("Review board", "Check the detected ${recognition.board.columns}×${recognition.board.rows} layout")
                 CapturedOrbBoard(recognition = recognition)
             }
         }
@@ -232,6 +235,7 @@ fun SolveSettingsDrawer(
     onApply: () -> Unit,
     openRequested: Boolean = false,
     onOpenHandled: () -> Unit = {},
+    board: Board? = null,
     content: @Composable (openSettings: () -> Unit) -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -261,13 +265,28 @@ fun SolveSettingsDrawer(
                     Spacer(Modifier.height(20.dp))
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            ChoiceDropdown(
+                                selectedValue = settings.boardSizeOverride,
+                                choices = listOf(null to "Automatic") + BoardSize.entries.map { it to it.displayName },
+                                label = "Board size",
+                                enabled = !isSolving,
+                                onSelected = { onSettingsChanged(settings.copy(boardSizeOverride = it)) },
+                            )
+                            Text("Use Automatic unless the detected layout is incorrect. Changing the size rereads your screenshot.",
+                                style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(16.dp))
                             Text("Combo target", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             ComboTargetDropdown(
                                 selectedTarget = settings.targetComboCount,
+                                maximumTarget = (board?.orbs?.size ?: settings.boardSizeOverride?.cellCount ?: BoardSize.LARGE.cellCount) / 3,
                                 enabled = !isSolving,
                                 onTargetSelected = { onSettingsChanged(settings.copy(targetComboCount = it)) },
                             )
+                            if (board != null && settings.targetComboCount?.let { it > board.comboCapacity } == true) {
+                                Text("This board has enough orbs for at most ${board.comboCapacity} combos without skyfall. Choose a lower minimum or capture a new board.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            }
                             Spacer(Modifier.height(16.dp))
                             Text("Required match pattern", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
@@ -506,13 +525,16 @@ private fun OrbColorDropdown(
 @Composable
 private fun ComboTargetDropdown(
     selectedTarget: Int?,
+    maximumTarget: Int,
     enabled: Boolean,
     onTargetSelected: (Int?) -> Unit,
 ) {
-    val targets = listOfNotNull(5, 7, 10, selectedTarget).distinct().sorted()
+    val targets = ((1..maximumTarget).toList() + listOfNotNull(selectedTarget)).distinct().sorted()
     ChoiceDropdown(
         selectedValue = selectedTarget,
-        choices = listOf(null to "No minimum") + targets.map { it to "$it combos" },
+        choices = listOf(null to "No minimum") + targets.map {
+            it to if (it > maximumTarget) "$it combos (exceeds board size)" else "$it combos"
+        },
         label = "Minimum combos",
         enabled = enabled,
         onSelected = onTargetSelected,

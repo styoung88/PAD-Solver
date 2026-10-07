@@ -3,6 +3,7 @@ package com.example.phoneapp.solver
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.phoneapp.board.OrbColor
+import com.example.phoneapp.board.BoardSize
 
 /** Retains existing preference keys so installed apps keep their solve settings. */
 internal class SolveSettingsStore(private val preferences: SharedPreferences) {
@@ -14,6 +15,7 @@ internal class SolveSettingsStore(private val preferences: SharedPreferences) {
             preferredColor = OrbColor.attackingColors.firstOrNull { it.name == values[PREFERRED_COLOR_KEY] },
             targetComboCount = (values[TARGET_COMBO_COUNT_KEY] as? Int)?.takeIf { it > 0 },
             matchPatternFocus = MatchPattern.entries.firstOrNull { it.name == values[MATCH_PATTERN_KEY] },
+            boardSizeOverride = BoardSize.entries.firstOrNull { it.name == values[BOARD_SIZE_KEY] },
         )
     }
 
@@ -25,6 +27,8 @@ internal class SolveSettingsStore(private val preferences: SharedPreferences) {
             else putInt(TARGET_COMBO_COUNT_KEY, settings.targetComboCount)
             if (settings.matchPatternFocus == null) remove(MATCH_PATTERN_KEY)
             else putString(MATCH_PATTERN_KEY, settings.matchPatternFocus.name)
+            if (settings.boardSizeOverride == null) remove(BOARD_SIZE_KEY)
+            else putString(BOARD_SIZE_KEY, settings.boardSizeOverride.name)
         }.apply()
     }
 
@@ -33,5 +37,6 @@ internal class SolveSettingsStore(private val preferences: SharedPreferences) {
         const val PREFERRED_COLOR_KEY = "preferred_orb_color"
         const val TARGET_COMBO_COUNT_KEY = "target_combo_count"
         const val MATCH_PATTERN_KEY = "match_pattern"
+        const val BOARD_SIZE_KEY = "board_size_override"
     }
 }
