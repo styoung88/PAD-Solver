@@ -2,9 +2,9 @@
 
 Use Conventional Commits for all commit messages: `<type>[optional scope]: <description>`, such as `feat: add a feature`, `fix: correct a bug`, or `docs: update development instructions`. See `CONTRIBUTING.md` for details.
 
-Write PR descriptions and comments for reviewers: explain the final changes, resulting behavior, validation, and relevant limitations. Keep detail proportional to the diff. Omit conversation history, running progress logs, routine commands, and transient troubleshooting.
+Keep PR descriptions and comments concise: cover only the files changed and the overall purpose of the change. Omit validation results and methods, publishing checklists, future work, conversation history, progress logs, and troubleshooting unless the user explicitly requests them.
 
-Keep agent-only Markdown concise: include only actionable instructions or necessary context useful across tasks. Put one-time findings and validation results in the PR description.
+Keep agent-only Markdown concise: include only actionable instructions or necessary context useful across tasks. Keep one-time findings and validation results out of these files; report them in chat when relevant.
 
 Create a dedicated feature branch from an up-to-date `main` before starting each new feature. Use the `codex/` branch prefix unless the user specifies another name. Continue related work on its existing feature branch.
 
