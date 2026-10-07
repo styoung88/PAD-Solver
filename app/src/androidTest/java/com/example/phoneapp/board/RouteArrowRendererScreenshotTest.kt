@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.PointF
+import android.graphics.Paint
+import android.graphics.RectF
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.capture.BoardRecognition
@@ -13,12 +15,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.math.roundToInt
+import java.io.File
 
 /** Checks overlay endpoint geometry against orb centers measured in a real PAD screenshot. */
 @RunWith(AndroidJUnit4::class)
 class RouteArrowRendererScreenshotTest {
     @Test
-    fun endpointBadgesStayCenteredOnMeasuredOrbCenters() {
+    fun endpointMarkersStayCenteredOnMeasuredOrbCenters() {
         val context = InstrumentationRegistry.getInstrumentation().context
         val screenshot = checkNotNull(
             context.assets.open(REFERENCE_SCREENSHOT).use(BitmapFactory::decodeStream),
@@ -51,11 +54,10 @@ class RouteArrowRendererScreenshotTest {
                 bounds = board.boardBounds,
                 columns = board.board.columns,
                 rows = board.board.rows,
-                density = context.resources.displayMetrics.density,
             )
 
-            assertBadgeCenter(overlay, measuredOrbCenter(screenshot, start), START_BADGE_COLOR)
-            assertBadgeCenter(overlay, measuredOrbCenter(screenshot, finish), END_BADGE_COLOR)
+            assertMarkerCenter(overlay, measuredOrbCenter(screenshot, start), START_BADGE_COLOR)
+            assertMarkerCenter(overlay, measuredOrbCenter(screenshot, finish), END_BADGE_COLOR)
         } finally {
             overlay.recycle()
             screenshot.recycle()
@@ -67,25 +69,102 @@ class RouteArrowRendererScreenshotTest {
         MEASURED_ROW_CENTERS[position.row] * screenshot.height / REFERENCE_HEIGHT,
     )
 
-    private fun assertBadgeCenter(bitmap: Bitmap, expected: PointF, color: Int) {
-        val radius = (bitmap.width.toFloat() / Board.DEFAULT_COLUMNS * 0.32f).roundToInt()
-        val left = (expected.x - radius).roundToInt().coerceAtLeast(0)
-        val right = (expected.x + radius).roundToInt().coerceAtMost(bitmap.width - 1)
-        val top = (expected.y - radius).roundToInt().coerceAtLeast(0)
-        val bottom = (expected.y + radius).roundToInt().coerceAtMost(bitmap.height - 1)
-        var sumX = 0L
-        var sumY = 0L
-        var pixels = 0
-        for (y in top..bottom) for (x in left..right) {
-            if (bitmap.getPixel(x, y) == color) {
-                sumX += x
-                sumY += y
-                pixels++
+    @Test
+    fun denseRevisitsRenderIdenticallyWithPreparedGeometryAndExportPreviews() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val routes = listOf(
+            listOf(29, 28, 27, 26, 25, 24, 18, 12, 13, 7, 8, 14, 13, 12, 6, 0, 1, 2, 8, 7, 6),
+            listOf(8, 14, 15, 21, 20, 26, 27, 28, 22, 21, 27, 28, 29, 23, 22, 21, 20, 19, 18,
+                12, 6, 7, 13, 12, 18, 19, 13, 7, 1, 2, 1, 0, 6, 12, 13, 14, 8, 2),
+            listOf(0, 1, 7, 6, 0, 1, 7, 6, 0, 1, 7, 6, 0),
+        ).map { route -> route.map { BoardPosition(it / 6, it % 6) } }
+        val colors = listOf("WDDWWF", "GGWGGG", "GGDFLH", "WWWLLH", "LLWLWH").joinToString("")
+        for ((fixture, route) in routes.withIndex()) {
+            val bounds = RectF(0f, 0f, 1080f, 900f)
+            val prepared = RouteArrowRenderer.prepareRoute(route, 6, 5)
+            val direct = Bitmap.createBitmap(1080, 900, Bitmap.Config.ARGB_8888)
+            val cached = Bitmap.createBitmap(1080, 900, Bitmap.Config.ARGB_8888)
+            try {
+                fun render(bitmap: Bitmap, geometry: RouteArrowRenderer.PreparedRoute?) {
+                    val canvas = Canvas(bitmap)
+                    canvas.drawColor(0xFF202631.toInt())
+                    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                    for (index in 0 until 30) {
+                        paint.color = when (colors[index]) {
+                            'W' -> 0xFF4DA8E8.toInt()
+                            'G' -> 0xFF55B66A.toInt()
+                            'D' -> 0xFF9B6BCC.toInt()
+                            'F' -> 0xFFE94B43.toInt()
+                            'L' -> 0xFFF3D447.toInt()
+                            else -> 0xFFE78EB5.toInt()
+                        }
+                        canvas.drawCircle((index % 6 + 0.5f) * 180, (index / 6 + 0.5f) * 180, 84.6f, paint)
+                    }
+                    RouteArrowRenderer.draw(canvas, route, bounds, 6, 5, preparedRoute = geometry)
+                }
+                render(direct, null)
+                render(cached, prepared)
+                assertTrue("Prepared rendering differs for fixture $fixture", direct.sameAs(cached))
+                File(context.getExternalFilesDir(null), "route-preview-$fixture.png").outputStream().use {
+                    assertTrue(direct.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+                if (fixture == 1) exportGameOverlay(route, prepared)
+            } finally {
+                direct.recycle()
+                cached.recycle()
             }
         }
-        assertTrue("Expected badge fill near measured orb center $expected", pixels > 0)
-        assertEquals("Badge X must match the orb center", expected.x, sumX.toFloat() / pixels, CENTER_TOLERANCE_PX)
-        assertEquals("Badge Y must match the orb center", expected.y, sumY.toFloat() / pixels, CENTER_TOLERANCE_PX)
+    }
+
+    @Test
+    fun stalePreparedRouteCannotDrawADifferentPathOfTheSameLength() {
+        val first = listOf(BoardPosition(0, 0), BoardPosition(0, 1), BoardPosition(1, 1))
+        val second = listOf(BoardPosition(4, 5), BoardPosition(4, 4), BoardPosition(3, 4))
+        val stale = RouteArrowRenderer.prepareRoute(first, 6, 5)
+        val direct = Bitmap.createBitmap(600, 500, Bitmap.Config.ARGB_8888)
+        val cached = Bitmap.createBitmap(600, 500, Bitmap.Config.ARGB_8888)
+        try {
+            val bounds = RectF(0f, 0f, 600f, 500f)
+            RouteArrowRenderer.draw(Canvas(direct), second, bounds, 6, 5)
+            RouteArrowRenderer.draw(Canvas(cached), second, bounds, 6, 5, preparedRoute = stale)
+            assertTrue("Stale geometry must be replaced", direct.sameAs(cached))
+        } finally {
+            direct.recycle()
+            cached.recycle()
+        }
+    }
+
+    private fun exportGameOverlay(route: List<BoardPosition>, prepared: RouteArrowRenderer.PreparedRoute) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val screenshot = checkNotNull(instrumentation.context.assets.open(REFERENCE_SCREENSHOT).use(BitmapFactory::decodeStream))
+        var composite: Bitmap? = null
+        try {
+            val recognized = PadBoardRecognizer().recognize(screenshot) as BoardRecognition.Recognized
+            composite = screenshot.copy(Bitmap.Config.ARGB_8888, true)
+            RouteArrowRenderer.draw(Canvas(composite), route, recognized.boardBounds, 6, 5, preparedRoute = prepared)
+            File(instrumentation.targetContext.getExternalFilesDir(null), "route-overlay.png").outputStream().use {
+                assertTrue(composite.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally {
+            composite?.recycle()
+            screenshot.recycle()
+        }
+    }
+
+    private fun assertMarkerCenter(bitmap: Bitmap, expected: PointF, color: Int) {
+        val radius = bitmap.width.toFloat() / Board.DEFAULT_COLUMNS * 0.20f
+        val points = listOf(PointF(expected.x - radius, expected.y), PointF(expected.x + radius, expected.y),
+            PointF(expected.x, expected.y - radius), PointF(expected.x, expected.y + radius))
+        val visibleSides = points.count { point ->
+            val tolerance = CENTER_TOLERANCE_PX.roundToInt()
+            (-tolerance..tolerance).any { dx -> (-tolerance..tolerance).any { dy ->
+                val x = (point.x + dx).roundToInt()
+                val y = (point.y + dy).roundToInt()
+                x in 0 until bitmap.width && y in 0 until bitmap.height && bitmap.getPixel(x, y) == color
+            } }
+        }
+        // The departure/arrival leg can cross one side of a hollow marker.
+        assertTrue("Marker must surround the measured orb center $expected ($visibleSides visible sides)", visibleSides >= 3)
     }
 
     private companion object {

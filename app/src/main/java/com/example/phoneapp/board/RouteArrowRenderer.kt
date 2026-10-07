@@ -5,31 +5,28 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
-import kotlin.math.abs
+import android.graphics.Typeface
+import com.example.phoneapp.board.RouteGeometry.Point
 import kotlin.math.hypot
 
-/** Shared continuous route styling for the in-app preview and PAD overlay. */
+/** Shared numbered route styling for the in-app preview and PAD overlay. */
 object RouteArrowRenderer {
-    private const val ROUTE_COLOR = 0xFF36E0D0.toInt()
-    private val ROUTE_GRADIENT = intArrayOf(
-        ROUTE_COLOR,
-        0xFF29B6F6.toInt(),
-        0xFF7E57C2.toInt(),
-        0xFFEC407A.toInt(),
-    )
-    private const val OUTLINE_COLOR = 0xE817202B.toInt()
+    private const val OUTLINE_COLOR = 0xFF101824.toInt()
     private const val START_BADGE_COLOR = 0xFF4CAF50.toInt()
     private const val END_BADGE_COLOR = 0xFFEF4444.toInt()
-    private const val GRADIENT_SPEED_MULTIPLIER = 2f
-    private const val CURVE_TIGHTNESS = 0.14f
+    private val COLORS = intArrayOf(0xFF56F0D6.toInt(), 0xFF62C8FF.toInt(), 0xFFC8A2FF.toInt(), 0xFFFF92BA.toInt())
 
-    /** Geometry prepared once per path and reused by preview and overlay draws. */
-    class PreparedRoute internal constructor(internal val anchors: List<Pair<Float, Float>>)
+    class PreparedRoute internal constructor(
+        internal val path: List<BoardPosition>,
+        internal val columns: Int,
+        internal val rows: Int,
+        internal val layout: RouteGeometry.Layout,
+    )
 
     fun prepareRoute(path: List<BoardPosition>, columns: Int, rows: Int): PreparedRoute {
         require(columns > 0 && rows > 0)
-        val centerline = path.map { position -> (position.column + 0.5f) to (position.row + 0.5f) }
-        return PreparedRoute(separateOverlappingRuns(centerline, 1f, columns / 2f))
+        require(path.all { it.column in 0 until columns && it.row in 0 until rows })
+        return PreparedRoute(path.toList(), columns, rows, RouteGeometry.prepare(path))
     }
 
     fun draw(
@@ -38,305 +35,156 @@ object RouteArrowRenderer {
         bounds: RectF,
         columns: Int,
         rows: Int,
-        density: Float,
         endpointCenters: Pair<Pair<Float, Float>, Pair<Float, Float>>? = null,
         preparedRoute: PreparedRoute? = null,
     ) {
-        if (path.isEmpty() || columns <= 0 || rows <= 0) return
+        if (path.isEmpty() || columns <= 0 || rows <= 0 || bounds.isEmpty) return
+        val geometry = preparedRoute?.takeIf { it.path == path && it.columns == columns && it.rows == rows }
+            ?: prepareRoute(path, columns, rows)
         val cellWidth = bounds.width() / columns
         val cellHeight = bounds.height() / rows
         val cellSize = minOf(cellWidth, cellHeight)
-        val routePoints = path.map { position ->
-            (bounds.left + (position.column + 0.5f) * cellWidth) to
-                (bounds.top + (position.row + 0.5f) * cellHeight)
-        }
-        // Keep the solver's route as the canonical trace first. Then detect
-        // collisions between non-adjacent portions of that trace and move a
-        // later overlapping run into the clearest nearby lane. Shared anchor
-        // offsets keep each adjusted run joined to the rest of the route.
-        val routeAnchors = preparedRoute
-            ?.takeIf { it.anchors.size == routePoints.size }
-            ?.anchors
-            ?.map { (column, row) ->
-                (bounds.left + column * cellWidth) to (bounds.top + row * cellHeight)
-            }
-            ?: separateOverlappingRuns(routePoints, cellSize, bounds.centerX())
-
-        val sameStartAndFinish = path.first() == path.last()
-        val start = endpointCenters?.first ?: routePoints.first().let { point ->
-            if (sameStartAndFinish) point.first to point.second - cellSize * 0.19f else point
-        }
-        val finish = endpointCenters?.second ?: routePoints.last().let { point ->
-            if (sameStartAndFinish) point.first to point.second + cellSize * 0.19f else point
-        }
-        val startRadius = cellSize * 0.23f
-        val finishRadius = cellSize * 0.23f
-        val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = OUTLINE_COLOR
+        fun screen(point: Point) = Point(bounds.left + point.x * cellWidth, bounds.top + point.y * cellHeight)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = maxOf(3f * density, cellSize * 0.0825f)
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
-        val routePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ROUTE_COLOR
-            style = Paint.Style.STROKE
-            strokeWidth = maxOf(2f * density, cellSize * 0.04125f)
-            strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
         }
-        val continuousRoute = Path().apply {
-            moveTo(routeAnchors.first().first, routeAnchors.first().second)
-            for (index in 0 until routeAnchors.lastIndex) {
-                val (control1, control2) = curveControls(routeAnchors, index)
-                val end = routeAnchors[index + 1]
-                cubicTo(control1.first, control1.second, control2.first, control2.second, end.first, end.second)
+        fun drawText(label: String, point: Point, size: Float) {
+            text.textSize = size
+            canvas.drawText(label, point.x, point.y - (text.ascent() + text.descent()) / 2f, text)
+        }
+        fun stroke(trace: Path, color: Int, spacing: Float = 0.18f) {
+            // Shrink crowded lanes together with their casing rather than let outlines merge.
+            val width = cellSize * minOf(0.044f, spacing * 0.28f)
+            paint.style = Paint.Style.STROKE
+            paint.color = OUTLINE_COLOR
+            paint.strokeWidth = width + cellSize * minOf(0.042f, spacing * 0.25f)
+            canvas.drawPath(trace, paint)
+            paint.color = color
+            paint.strokeWidth = width
+            canvas.drawPath(trace, paint)
+        }
+        fun visitPath(curve: RouteGeometry.Curve): Path = Path().apply {
+            val first = screen(curve.from)
+            val a = screen(curve.control1)
+            val b = screen(curve.control2)
+            val end = screen(curve.to)
+            moveTo(first.x, first.y)
+            cubicTo(a.x, a.y, b.x, b.y, end.x, end.y)
+        }
+        val moves = geometry.layout.moves
+        val start = endpointCenters?.first?.let { Point(it.first, it.second) }
+            ?: screen(RouteGeometry.center(path.first()))
+        val end = endpointCenters?.second?.let { Point(it.first, it.second) }
+            ?: screen(RouteGeometry.center(path.last()))
+        val sharedEndpoint = path.first() == path.last()
+        val startRadius = cellSize * if (sharedEndpoint) 0.16f else 0.20f
+        val endRadius = cellSize * if (sharedEndpoint) 0.24f else 0.20f
+        val samples = geometry.layout.visits.flatMap { curve -> (0..20).map { screen(curve.point(it / 20f)) } } +
+            moves.flatMap { move -> (0..10).map { screen(move.from + (move.to - move.from) * (it / 10f)) } }
+        fun labelPosition(center: Point, otherLabel: Point? = null): Point =
+            listOf(Point(-0.32f, -0.32f), Point(0.32f, -0.32f), Point(-0.32f, 0.32f), Point(0.32f, 0.32f))
+                .map { center + it * cellSize }
+                .maxBy { candidate ->
+                    minOf(samples.minOfOrNull { it.distance(candidate) } ?: cellSize,
+                        otherLabel?.distance(candidate)?.minus(cellSize * 0.20f) ?: cellSize)
+                }
+        val startLabel = labelPosition(start)
+        val endLabel = labelPosition(end, startLabel)
+
+        fun endpoint(center: Point, label: Point, radius: Float, color: Int, square: Boolean) {
+            val direction = (label - center) * (1f / label.distance(center))
+            stroke(Path().apply {
+                val from = center + direction * radius
+                moveTo(from.x, from.y)
+                lineTo(label.x, label.y)
+            }, color)
+            val shape = Path().apply {
+                if (square) addRoundRect(center.x - radius, center.y - radius, center.x + radius, center.y + radius,
+                    cellSize * 0.035f, cellSize * 0.035f, Path.Direction.CW)
+                else addCircle(center.x, center.y, radius, Path.Direction.CW)
             }
+            stroke(shape, color)
         }
-        // Draw one rounded outline under all colored moves, so repeated or
-        // overlapping segments can never create gaps in the route itself.
-        canvas.drawPath(continuousRoute, outlinePaint)
+        // Hollow endpoint markers sit beneath the route, so revisits keep their
+        // natural flow through them. Letter badges sit in the clearest nearby corner.
+        endpoint(start, startLabel, startRadius, START_BADGE_COLOR, false)
+        endpoint(end, endLabel, endRadius, END_BADGE_COLOR, true)
+        for (index in geometry.layout.visits.indices) {
+            val color = routeColor(index.coerceAtMost(moves.lastIndex), moves.size)
+            val spacing = minOf(moves.getOrNull(index - 1)?.laneSpacing ?: 0.18f,
+                moves.getOrNull(index)?.laneSpacing ?: 0.18f)
+            // Each pass has an opaque casing: unavoidable crossings read as
+            // overpasses instead of blending into a branching junction.
+            stroke(visitPath(geometry.layout.visits[index]), color, spacing)
+            val move = moves.getOrNull(index) ?: continue
+            val from = screen(move.from)
+            val to = screen(move.to)
+            stroke(Path().apply { moveTo(from.x, from.y); lineTo(to.x, to.y) }, color, move.laneSpacing)
+        }
+        // Number every move at the cell boundary, where the orb artwork leaves the
+        // most space. Upright numbers disambiguate crossings and repeated loops.
+        for ((index, move) in moves.withIndex()) {
+            val center = screen((move.from + move.to) * 0.5f)
+            val color = routeColor(index, moves.size)
+            val radius = cellSize * minOf(0.091f, move.laneSpacing * 0.43f)
+            paint.style = Paint.Style.FILL
+            paint.color = OUTLINE_COLOR
+            canvas.drawCircle(center.x, center.y, radius, paint)
+            drawText((index + 1).toString(), center, radius * 1.32f)
 
-        val arrowOutline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = OUTLINE_COLOR
-            style = Paint.Style.STROKE
-            strokeWidth = maxOf(2f * density, cellSize * 0.055f)
-            strokeJoin = Paint.Join.ROUND
-        }
-        val arrowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ROUTE_COLOR
-            style = Paint.Style.FILL
-        }
-
-        val segmentCount = routePoints.lastIndex
-        val gradientStopCount = when {
-            segmentCount <= 10 -> 2
-            segmentCount <= 20 -> 3
-            else -> ROUTE_GRADIENT.size
-        }
-        fun drawSegment(index: Int, restoreOutline: Boolean = false) {
-            val from = routeAnchors[index]
-            val to = routeAnchors[index + 1]
-            val (control1, control2) = curveControls(routeAnchors, index)
-            val segmentColor = routeColorForStep(index, segmentCount, gradientStopCount)
-            routePaint.color = segmentColor
-            arrowFill.color = segmentColor
-            val segmentPath = Path().apply {
-                moveTo(from.first, from.second)
-                cubicTo(control1.first, control1.second, control2.first, control2.second, to.first, to.second)
-            }
-            if (restoreOutline) canvas.drawPath(segmentPath, outlinePaint)
-            canvas.drawPath(segmentPath, routePaint)
-
-            val arrowProgress = 0.72f
-            val arrowPoint = cubicPoint(from, control1, control2, to, arrowProgress)
-            val (dx, dy) = cubicTangent(from, control1, control2, to, arrowProgress)
-            val length = hypot(dx, dy).coerceAtLeast(1f)
-            val perpendicularX = -dy / length
-            val perpendicularY = dx / length
-            val arrowTipX = arrowPoint.first
-            val arrowTipY = arrowPoint.second
-            val arrowBaseX = arrowTipX - dx / length * cellSize * 0.14f
-            val arrowBaseY = arrowTipY - dy / length * cellSize * 0.14f
-            val wing = cellSize * 0.075f
+            val vector = Point(move.direction.x * cellWidth, move.direction.y * cellHeight)
+            val direction = vector * (1f / hypot(vector.x, vector.y))
+            val normal = Point(-direction.y, direction.x)
+            val base = center + direction * (radius + cellSize * 0.025f)
+            val tip = base + direction * (cellSize * 0.105f)
+            val wing = cellSize * minOf(0.062f, move.laneSpacing * 0.34f)
             val arrow = Path().apply {
-                moveTo(arrowTipX, arrowTipY)
-                lineTo(arrowBaseX + perpendicularX * wing, arrowBaseY + perpendicularY * wing)
-                lineTo(arrowBaseX - perpendicularX * wing, arrowBaseY - perpendicularY * wing)
+                moveTo(tip.x, tip.y)
+                lineTo(base.x + normal.x * wing, base.y + normal.y * wing)
+                lineTo(base.x - normal.x * wing, base.y - normal.y * wing)
                 close()
             }
-            canvas.drawPath(arrow, arrowOutline)
-            canvas.drawPath(arrow, arrowFill)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = cellSize * 0.027f
+            paint.color = OUTLINE_COLOR
+            canvas.drawPath(arrow, paint)
+            paint.style = Paint.Style.FILL
+            paint.color = color
+            canvas.drawPath(arrow, paint)
         }
-        for (index in 0 until segmentCount) drawSegment(index)
-
-        // The endpoint legs stop visually at the badge rims. Later passes
-        // are replayed through the badge areas so revisits remain traceable.
-        canvas.drawCircle(start.first, start.second, startRadius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = OUTLINE_COLOR })
-        canvas.drawCircle(start.first, start.second, startRadius * 0.78f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = START_BADGE_COLOR })
-        canvas.drawCircle(finish.first, finish.second, finishRadius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = OUTLINE_COLOR })
-        canvas.drawCircle(finish.first, finish.second, finishRadius * 0.78f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = END_BADGE_COLOR })
-
-        if (segmentCount > 2) {
-            val badgeAreas = Path().apply {
-                addCircle(start.first, start.second, startRadius, Path.Direction.CW)
-                addCircle(finish.first, finish.second, finishRadius, Path.Direction.CW)
+        fun badge(center: Point, label: String, color: Int, square: Boolean) {
+            val radius = cellSize * 0.115f
+            val casing = radius + cellSize * 0.022f
+            paint.style = Paint.Style.FILL
+            fun fill(size: Float, fillColor: Int) {
+                paint.color = fillColor
+                if (square) canvas.drawRoundRect(center.x - size, center.y - size, center.x + size, center.y + size,
+                    cellSize * 0.025f, cellSize * 0.025f, paint)
+                else canvas.drawCircle(center.x, center.y, size, paint)
             }
-            canvas.save()
-            canvas.clipPath(badgeAreas)
-            for (index in 1 until (segmentCount - 1)) drawSegment(index, restoreOutline = true)
-            canvas.restore()
+            fill(casing, OUTLINE_COLOR)
+            fill(radius, color)
+            drawText(label, center, radius * 1.35f)
         }
-
+        badge(startLabel, "S", START_BADGE_COLOR, false)
+        badge(endLabel, "E", END_BADGE_COLOR, true)
     }
 
-    private fun curveControls(points: List<Pair<Float, Float>>, index: Int): Pair<Pair<Float, Float>, Pair<Float, Float>> {
-        val from = points[index]
-        val to = points[index + 1]
-        val before = points.getOrNull(index - 1) ?: from
-        val after = points.getOrNull(index + 2) ?: to
-        val control1 = (from.first + (to.first - before.first) * CURVE_TIGHTNESS) to
-            (from.second + (to.second - before.second) * CURVE_TIGHTNESS)
-        val control2 = (to.first - (after.first - from.first) * CURVE_TIGHTNESS) to
-            (to.second - (after.second - from.second) * CURVE_TIGHTNESS)
-        return control1 to control2
-    }
-
-    private data class RouteSample(val segmentIndex: Int, val point: Pair<Float, Float>)
-
-    /**
-     * Builds a center-to-center trace, detects close non-adjacent portions, and
-     * nudges later portions sideways. Offsets are shared across anchor points
-     * so the final spline remains a single continuous route.
-     */
-    private fun separateOverlappingRuns(
-        centerline: List<Pair<Float, Float>>,
-        cellSize: Float,
-        boardCenterX: Float,
-    ): List<Pair<Float, Float>> {
-        if (centerline.size < 4) return centerline
-
-        val segmentOffsets = MutableList(centerline.lastIndex) { 0f to 0f }
-        val earlierSamples = mutableListOf<RouteSample>()
-        val collisionDistance = cellSize * 0.20f
-        val candidateLanes = floatArrayOf(-0.30f, -0.22f, -0.14f, 0.14f, 0.22f, 0.30f)
-
-        for (segmentIndex in 0 until centerline.lastIndex) {
-            val (control1, control2) = curveControls(centerline, segmentIndex)
-            val start = centerline[segmentIndex]
-            val end = centerline[segmentIndex + 1]
-            val trace = sampleCurve(start, control1, control2, end)
-            val prior = earlierSamples.filter { it.segmentIndex < segmentIndex - 1 }
-
-            if (prior.isNotEmpty() && minimumClearance(trace, prior) < collisionDistance) {
-                val (dx, dy) = cubicTangent(start, control1, control2, end, 0.5f)
-                val tangentLength = hypot(dx, dy).coerceAtLeast(1f)
-                val normalX = -dy / tangentLength
-                val normalY = dx / tangentLength
-                var bestOffset = 0f to 0f
-                var bestClearance = minimumClearance(trace, prior)
-                var bestInboardPreference = 0f
-                val segmentCenterX = (start.first + end.first) * 0.5f
-                val towardCenter = boardCenterX - segmentCenterX
-
-                for (lane in candidateLanes) {
-                    val offset = (normalX * cellSize * lane) to (normalY * cellSize * lane)
-                    val shiftedTrace = trace.map { (x, y) -> (x + offset.first) to (y + offset.second) }
-                    val clearance = minimumClearance(shiftedTrace, prior)
-                    val inboardPreference = if (offset.first * towardCenter > 0f) abs(offset.first) else 0f
-                    val improvesClearance = clearance > bestClearance + cellSize * 0.02f
-                    val comparableButMoreInboard =
-                        clearance >= bestClearance - cellSize * 0.02f &&
-                            inboardPreference > bestInboardPreference
-                    if (improvesClearance || comparableButMoreInboard) {
-                        bestClearance = clearance
-                        bestOffset = offset
-                        bestInboardPreference = inboardPreference
-                    }
-                }
-                segmentOffsets[segmentIndex] = bestOffset
-            }
-
-            val offset = segmentOffsets[segmentIndex]
-            sampleCurve(start, control1, control2, end).forEach { (x, y) ->
-                earlierSamples += RouteSample(segmentIndex, (x + offset.first) to (y + offset.second))
-            }
-        }
-
-        // Average neighboring segment lanes at shared vertices. This blends a
-        // lane transition across turns while keeping the path topologically
-        // connected. Keep the trace endpoints pinned to the orb centers.
-        return centerline.indices.map { index ->
-            if (index == 0 || index == centerline.lastIndex) return@map centerline[index]
-            val incoming = segmentOffsets.getOrNull(index - 1) ?: (0f to 0f)
-            val outgoing = segmentOffsets.getOrNull(index) ?: (0f to 0f)
-            (centerline[index].first + (incoming.first + outgoing.first) * 0.5f) to
-                (centerline[index].second + (incoming.second + outgoing.second) * 0.5f)
-        }
-    }
-
-    private fun sampleCurve(
-        start: Pair<Float, Float>,
-        control1: Pair<Float, Float>,
-        control2: Pair<Float, Float>,
-        end: Pair<Float, Float>,
-    ): List<Pair<Float, Float>> = (1..9).map { sample ->
-        cubicPoint(start, control1, control2, end, sample / 10f)
-    }
-
-    private fun minimumClearance(
-        current: List<Pair<Float, Float>>,
-        previous: List<RouteSample>,
-    ): Float {
-        if (current.isEmpty() || previous.isEmpty()) return Float.MAX_VALUE
-        var clearance = Float.MAX_VALUE
-        for ((x, y) in current) {
-            for (sample in previous) {
-                clearance = minOf(clearance, hypot(x - sample.point.first, y - sample.point.second))
-            }
-        }
-        return clearance
-    }
-
-    private fun cubicPoint(
-        start: Pair<Float, Float>,
-        control1: Pair<Float, Float>,
-        control2: Pair<Float, Float>,
-        end: Pair<Float, Float>,
-        t: Float,
-    ): Pair<Float, Float> {
-        val inverse = 1f - t
-        val startWeight = inverse * inverse * inverse
-        val control1Weight = 3f * inverse * inverse * t
-        val control2Weight = 3f * inverse * t * t
-        val endWeight = t * t * t
-        return (
-            start.first * startWeight + control1.first * control1Weight +
-                control2.first * control2Weight + end.first * endWeight
-            ) to (
-            start.second * startWeight + control1.second * control1Weight +
-                control2.second * control2Weight + end.second * endWeight
-            )
-    }
-
-    private fun cubicTangent(
-        start: Pair<Float, Float>,
-        control1: Pair<Float, Float>,
-        control2: Pair<Float, Float>,
-        end: Pair<Float, Float>,
-        t: Float,
-    ): Pair<Float, Float> {
-        val inverse = 1f - t
-        val startWeight = 3f * inverse * inverse
-        val control1Weight = 6f * inverse * t
-        val control2Weight = 3f * t * t
-        return (
-            startWeight * (control1.first - start.first) +
-                control1Weight * (control2.first - control1.first) +
-                control2Weight * (end.first - control2.first)
-            ) to (
-            startWeight * (control1.second - start.second) +
-                control1Weight * (control2.second - control1.second) +
-                control2Weight * (end.second - control2.second)
-            )
-    }
-
-    private fun routeColorForStep(step: Int, segmentCount: Int, stopCount: Int): Int {
-        if (segmentCount <= 1 || stopCount <= 1) return ROUTE_GRADIENT.first()
-        val progress = step.toFloat() / (segmentCount - 1)
-        // Advance through the palette 50% faster, wrapping from its last
-        // active stop back to the first so long routes remain continuous.
-        val colorPosition = (progress * (stopCount - 1) * GRADIENT_SPEED_MULTIPLIER) % stopCount
-        val startIndex = colorPosition.toInt().coerceIn(0, stopCount - 1)
-        val endIndex = (startIndex + 1) % stopCount
-        val fraction = colorPosition - startIndex
-        val startColor = ROUTE_GRADIENT[startIndex]
-        val endColor = ROUTE_GRADIENT[endIndex]
-        fun channel(start: Int, end: Int) = (start + (end - start) * fraction).toInt()
-        return Color.rgb(
-            channel(Color.red(startColor), Color.red(endColor)),
-            channel(Color.green(startColor), Color.green(endColor)),
-            channel(Color.blue(startColor), Color.blue(endColor)),
-        )
+    private fun routeColor(step: Int, count: Int): Int {
+        val position = if (count <= 1) 0f else step.toFloat() / (count - 1) * COLORS.lastIndex
+        val index = position.toInt().coerceIn(0, COLORS.lastIndex)
+        val from = COLORS[index]
+        val to = COLORS[minOf(index + 1, COLORS.lastIndex)]
+        val fraction = position - index
+        fun blend(a: Int, b: Int) = (a + (b - a) * fraction).toInt()
+        return Color.rgb(blend(Color.red(from), Color.red(to)),
+            blend(Color.green(from), Color.green(to)), blend(Color.blue(from), Color.blue(to)))
     }
 }
