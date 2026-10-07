@@ -38,3 +38,6 @@ replay_pid*
 
 # Local Play release configuration
 release.properties
+
+# Local Codex image attachments
+.codex-remote-attachments/
