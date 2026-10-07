@@ -6,6 +6,40 @@ import org.junit.Test
 
 class BoardAnalyzerTest {
     @Test
+    fun fourMoveRouteHasFourInitialMatchesAndThreeNoSkyfallCascades() {
+        // Expected waves were independently traced by clearing runs and dropping columns.
+        val original = board("FWLLDF", "DLDGLD", "DHFFWF", "DDHHFF", "HHDDDD")
+        val path = listOf(11, 5, 4, 10, 9)
+        val replay = original.orbs.toMutableList()
+        for ((from, to) in path.zipWithNext()) {
+            val held = replay[from]
+            replay[from] = replay[to]
+            replay[to] = held
+        }
+        val moved = original.copy(orbs = replay)
+        assertEquals(board("FWLLLD", "DLDDGF", "DHFFWF", "DDHHFF", "HHDDDD"), moved)
+        val analysis = BoardAnalyzer.resolveCascades(moved)
+        val expectedWaves = listOf(
+            listOf(
+                OrbMatch(OrbColor.LIGHT, positions(2, 3, 4)),
+                OrbMatch(OrbColor.DARK, positions(6, 12, 18)),
+                OrbMatch(OrbColor.FIRE, positions(11, 17, 23)),
+                OrbMatch(OrbColor.DARK, positions(26, 27, 28, 29)),
+            ),
+            listOf(OrbMatch(OrbColor.HEART, positions(24, 25, 26, 27))),
+            listOf(OrbMatch(OrbColor.FIRE, positions(26, 27, 28))),
+            listOf(OrbMatch(OrbColor.DARK, positions(25, 26, 27))),
+        )
+        assertEquals(expectedWaves, analysis.cascadeWaves)
+        assertEquals(4, analysis.matches.size)
+        assertEquals(7, analysis.comboCount)
+        assertEquals(3, analysis.cascadeCount)
+    }
+
+    private fun positions(vararg indices: Int): Set<BoardPosition> =
+        indices.map { BoardPosition(it / 6, it % 6) }.toSet()
+
+    @Test
     fun horizontalAndVerticalRunsMatchButPairsAndUnknownDoNot() {
         val board = board("FFFUUU", "WLUUUU", "WDUUUU", "WHHHUU")
         val matches = BoardAnalyzer.analyze(board).matches
