@@ -1,5 +1,6 @@
 package com.example.phoneapp.ui
 
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
@@ -114,7 +115,19 @@ internal fun HomeScreen(
             .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        val resources = LocalResources.current
+        val privacyVisible = remember { mutableStateOf(false) }
+        if (privacyVisible.value) AlertDialog(
+            onDismissRequest = { privacyVisible.value = false },
+            title = { Text("Privacy policy") },
+            text = {
+                val policy = remember(resources) { resources.openRawResource(com.example.phoneapp.R.raw.privacy_policy).bufferedReader().use { it.readText() } }
+                Text(policy, modifier = Modifier.verticalScroll(rememberScrollState()))
+            },
+            confirmButton = { TextButton(onClick = { privacyVisible.value = false }) { Text("Close") } },
+        )
         SolverAppBar(onOpenSettings, enabled = true)
+        TextButton(onClick = { privacyVisible.value = true }) { Text("Privacy policy") }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Find your next route.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             Text("Solve a 6×5 board and follow the route in PAD.",
@@ -143,7 +156,7 @@ internal fun HomeScreen(
                     Switch(checked = screenshotShortcutEnabled, onCheckedChange = onScreenshotShortcutChanged,
                         modifier = Modifier.semantics { contentDescription = "Enable screenshots" })
                 }
-                Text("Solve new screenshots while the overlay is open. Needs full photo access.",
+                Text("While the overlay is open, PAD Solver reads photo names and folders to find new screenshots and processes matching images on this device. Images are not uploaded. Needs full photo access; turn this off or close the overlay to stop.",
                     style = MaterialTheme.typography.bodyMedium)
                 Text(when {
                     !screenshotShortcutEnabled -> "Use Capture in the overlay, or choose a saved screenshot."
