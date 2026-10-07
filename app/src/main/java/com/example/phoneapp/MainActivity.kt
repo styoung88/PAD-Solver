@@ -124,6 +124,7 @@ class MainActivity : ComponentActivity() {
         pendingRoutePermission = savedInstanceState?.getBoolean("pending_route") ?: false
         screenshotShortcutEnabled = screenshotShortcut.enabled
         refreshPhotoAccess()
+        boardState.refreshSettings()
         if (savedInstanceState == null) consumeBoardIntent(intent)
         overlaySettingsRequested = intent.getBooleanExtra(SolutionOverlayService.EXTRA_OPEN_SETTINGS, false)
         setContent {
@@ -343,8 +344,6 @@ class MainActivity : ComponentActivity() {
     private fun consumeBoardIntent(source: Intent) {
         source.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(boardState::loadCapture)
         source.data?.let(boardState::loadCapture)
-        source.removeExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)
-        source.data = null
     }
 
 }

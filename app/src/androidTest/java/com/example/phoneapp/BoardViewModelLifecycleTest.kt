@@ -1,5 +1,7 @@
 package com.example.phoneapp
 
+import android.content.Intent
+import android.net.Uri
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelProvider
@@ -11,11 +13,12 @@ class BoardViewModelLifecycleTest {
     @Test
     fun recreationRetainsBoardAndResetCancelsPendingLoad() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        val captureIntent = Intent(instrumentation.targetContext, MainActivity::class.java)
+            .setData(Uri.parse("file:///missing-board-image.png"))
+        ActivityScenario.launch<MainActivity>(captureIntent).use { scenario ->
             lateinit var original: BoardViewModel
             scenario.onActivity {
                 original = ViewModelProvider(it)[BoardViewModel::class.java]
-                original.loadCapture("/missing-board-image.png")
             }
             val deadline = System.nanoTime() + 5_000_000_000L
             var reading = true

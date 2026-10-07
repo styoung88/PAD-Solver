@@ -127,6 +127,10 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
         settingsStore.save(settings)
     }
 
+    fun refreshSettings() {
+        solveSettings = settingsStore.load()
+    }
+
     fun cancelSolve() {
         solveJob?.cancel()
         solveJob = null
