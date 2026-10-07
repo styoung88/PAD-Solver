@@ -8,137 +8,13 @@ import com.example.phoneapp.board.Orb
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
-
-data class GoalEvaluation(
-    val satisfied: Boolean,
-    /** Used to preserve the user's declared priority when multiple hard criteria are unmet. */
-    val primaryCriterionSatisfied: Boolean = satisfied,
-    val primaryScore: Int,
-    val secondaryScore: Int = 0,
-)
-
-/**
- * A goal seam for later conditions such as match-five and shape requirements.
- * The first version uses [MaximizeCombos].
- */
-fun interface SolveGoal {
-    fun evaluate(analysis: BoardAnalysis): GoalEvaluation
-
-    /** Lightweight heuristic for retaining incomplete required patterns during beam search. */
-    fun patternPotential(board: Board): Int = 0
-
-    val preferredColor: OrbColor? get() = null
-    val matchPatternFocus: MatchPattern? get() = null
-    val targetComboCount: Int? get() = null
-}
-
-object MaximizeCombos : SolveGoal {
-    override fun evaluate(analysis: BoardAnalysis) =
-        GoalEvaluation(satisfied = true, primaryScore = analysis.comboCount)
-}
-
-/** Board-only estimate for a mono-color team: orb-count factor × total combo factor. */
-data class MaximizeColorDamage(val color: OrbColor) : SolveGoal {
-    init {
-        require(color.isAttacking) { "A damage focus must use an attacking orb color." }
-    }
-
-    override val preferredColor: OrbColor get() = color
-
-    override fun evaluate(analysis: BoardAnalysis): GoalEvaluation =
-        GoalEvaluation(
-            satisfied = true,
-            primaryScore = ColorDamageEstimate.scoreRelativeDamage(analysis, color),
-            secondaryScore = analysis.comboCount,
-        )
-}
-
-/** Prefer routes that activate the selected match formation. */
-data class MaximizeMatchPattern(
-    val pattern: MatchPattern,
-    val color: OrbColor? = null,
-) : SolveGoal {
-    override val preferredColor: OrbColor? get() = color
-    override val matchPatternFocus: MatchPattern get() = pattern
-
-    override fun evaluate(analysis: BoardAnalysis): GoalEvaluation {
-        val patternCount = pattern.countMatches(analysis, color)
-        val patternSatisfied = patternCount > 0
-        return GoalEvaluation(
-            satisfied = patternSatisfied,
-            primaryCriterionSatisfied = patternSatisfied,
-            primaryScore = patternCount,
-            secondaryScore = color?.let { ColorDamageEstimate.scoreRelativeDamage(analysis, it) }
-                ?: analysis.comboCount,
-        )
-    }
-
-    override fun patternPotential(board: Board): Int = pattern.potentialScore(board, color)
-}
-
-/** First reach a combo threshold, then rank those routes by the chosen color objective. */
-data class TargetComboCount(
-    val target: Int,
-    val color: OrbColor? = null,
-    val pattern: MatchPattern? = null,
-) : SolveGoal {
-    init {
-        require(target > 0)
-        require(color == null || color.isAttacking) {
-            "A damage focus must use an attacking orb color."
-        }
-    }
-
-    override val preferredColor: OrbColor? get() = color
-    override val matchPatternFocus: MatchPattern? get() = pattern
-    override val targetComboCount: Int get() = target
-
-    override fun evaluate(analysis: BoardAnalysis): GoalEvaluation {
-        val reachedTarget = analysis.comboCount >= target
-        val colorScore = color?.let { ColorDamageEstimate.scoreRelativeDamage(analysis, it) }
-        val patternCount = pattern?.countMatches(analysis, color) ?: 0
-        val patternSatisfied = pattern == null || patternCount > 0
-        val objectiveScore = when {
-            !reachedTarget -> analysis.comboCount
-            pattern != null -> patternCount
-            colorScore != null -> colorScore
-            else -> analysis.comboCount
-        }
-        val secondaryScore = when {
-            !reachedTarget -> analysis.comboCount
-            pattern != null && colorScore != null -> colorScore
-            else -> analysis.comboCount
-        }
-        return GoalEvaluation(
-            satisfied = reachedTarget && patternSatisfied,
-            primaryCriterionSatisfied = reachedTarget,
-            primaryScore = objectiveScore,
-            secondaryScore = secondaryScore,
-        )
-    }
-
-    override fun patternPotential(board: Board): Int = pattern?.potentialScore(board, color) ?: 0
-}
-
-/**
- * A relative board score, not a prediction of actual damage. It models only
- * the size factor of each focused-color match and the global combo factor.
- * Both factors advance in quarter steps. Enhanced orbs add 6% each to their
- * individual match, represented as a percent multiplier on the same score.
- */
-object ColorDamageEstimate {
-    fun scoreRelativeDamage(analysis: BoardAnalysis, color: OrbColor): Int {
-        val comboFactorInQuarters = analysis.comboCount + 3
-        return analysis.allMatches.asSequence()
-            .filter { it.color == color }
-            .sumOf { match ->
-                comboFactorInQuarters * (match.size + 1) * (100 + 6 * match.enhancedOrbCount)
-            }
-    }
-}
 
 data class SolveOptions(
     /** Search bound in grid transitions, independent of the game's move timer. */
@@ -163,49 +39,74 @@ data class BoardSolution(
     val targetComboCount: Int? = null,
     val comboMinimumSatisfied: Boolean? = null,
     val matchPatternSatisfied: Boolean? = null,
+    /** False only when orb inventory or board dimensions prove a requirement impossible. */
+    val requirementsPossible: Boolean = true,
 ) {
     val comboCount: Int get() = predictedMatches.comboCount
     val orbMoves: Int get() = (path.size - 1).coerceAtLeast(0)
 }
 
-/**
- * Bounded beam search over the drag path. The objective and path bound are
- * independent so later solve conditions and a move-complexity slider can be
- * added without changing board recognition or the presentation layer.
- */
-class BoardSolver {
+/** Bounded drag-path search with separate candidate heuristics and final route ranking. */
+class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Default) {
     suspend fun solve(board: Board, options: SolveOptions = SolveOptions()): BoardSolution =
-        withContext(Dispatchers.Default) {
-            search(board, options)
-        }
+        withContext(dispatcher) { search(board, options) }
 
     private suspend fun search(board: Board, options: SolveOptions): BoardSolution {
-        val startCells = board.orbs.map(::encodeOrb).toIntArray()
-        var beam = board.orbs.indices.map { start ->
-            rank(
-                SearchState(
-                    cells = startCells.copyOf(),
-                    current = start,
-                    previous = -1,
-                    path = intArrayOf(start),
-                ),
-                board.columns,
-                board.rows,
-                options.goal,
-            )
+        coroutineContext.ensureActive()
+        // Explore the same paths regardless of the user's combo cutoff. One pass
+        // favors damage; another favors damage after reaching half the inventory's
+        // combo capacity, to escape low-combo local optima. Final requirements stay exact.
+        val searchGoal = (options.goal as? ConfiguredGoal)?.takeIf { goal ->
+            goal.requirements.any { it is ComboMinimum }
+        }?.let { goal ->
+            ConfiguredGoal(goal.preferredColor, goal.requirements.filterNot { it is ComboMinimum })
+        } ?: options.goal
+        val comboCapacity = board.comboCapacity
+        val explorationGoals = if (searchGoal is ConfiguredGoal && searchGoal.preferredColor != null && comboCapacity > 1) {
+            listOf(searchGoal, ConfiguredGoal(searchGoal.preferredColor,
+                listOf(ComboMinimum((comboCapacity + 1) / 2)) + searchGoal.requirements))
+        } else listOf(searchGoal)
+        // A demanding user minimum may need its own pass after the shared exploration.
+        val searchGoals = if (searchGoal !== options.goal) explorationGoals + options.goal else explorationGoals
+        val evaluations = object : LinkedHashMap<String, BoardEvaluation>(EVALUATION_CACHE_SIZE, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BoardEvaluation>): Boolean =
+                size > EVALUATION_CACHE_SIZE
         }
-        var best = beam.first()
+        fun rank(state: SearchState): RankedState {
+            val evaluation = synchronized(evaluations) { evaluations[state.layoutKey] } ?: run {
+                val candidateBoard = board.copy(orbs = state.cells.map { Orb(colorOf(it), modifiersOf(it)) })
+                val analysis = BoardAnalyzer.resolveCascades(candidateBoard)
+                val goal = options.goal.evaluate(analysis)
+                val searchScores = searchGoals.map { if (it === options.goal) goal else it.evaluate(analysis) }
+                val computed = BoardEvaluation(
+                    analysis, goal, searchScores,
+                    if (searchScores.all { it.satisfied }) 0 else searchGoal.patternPotential(candidateBoard),
+                    nearMatches(state.cells, board.columns, board.rows),
+                )
+                // Cascade analysis runs outside the lock; concurrent misses may compute
+                // the same pure evaluation, but only one immutable result is cached.
+                synchronized(evaluations) { evaluations.getOrPut(state.layoutKey) { computed } }
+            }
+            return RankedState(state, evaluation)
+        }
 
-        for (depth in 0..options.maxOrbMoves) {
+        val startCells = board.orbs.map(::encodeOrb).toIntArray()
+        val requirementsPossible = options.goal.requirements.all { it.isPossible(board) }
+        var best = rank(SearchState(startCells, 0, -1, intArrayOf(0)))
+        val initialBeam = if (requirementsPossible) board.orbs.indices.map { start ->
+            rank(SearchState(startCells, start, -1, intArrayOf(start)))
+        } else emptyList()
+        // An impossible request has no useful search frontier. Return the captured board for adjustment.
+        val maxDepth = if (requirementsPossible) options.maxOrbMoves else 0
+
+        suspend fun advance(beam: List<RankedState>, strategy: Int): Pair<List<RankedState>, RankedState?> {
             coroutineContext.ensureActive()
-            val candidates = LinkedHashMap<String, RankedState>()
+            val candidates = LinkedHashMap<String, SearchState>()
             for (ranked in beam) {
+                coroutineContext.ensureActive()
                 val state = ranked.state
-                if (isBetter(ranked, best)) best = ranked
-                if (depth == options.maxOrbMoves) continue
 
                 for (next in adjacent(state.current, board.columns, board.rows)) {
-                    // Immediately undoing the last swap cannot improve a solution.
                     if (next == state.previous) continue
                     val nextCells = state.cells.copyOf()
                     val moved = nextCells[state.current]
@@ -213,140 +114,124 @@ class BoardSolver {
                     nextCells[next] = moved
                     val nextPath = state.path.copyOf(state.path.size + 1)
                     nextPath[nextPath.lastIndex] = next
-                    val candidate = rank(
-                        SearchState(nextCells, next, state.current, nextPath),
-                        board.columns,
-                        board.rows,
-                        options.goal,
+                    val turned = state.previous >= 0 &&
+                        next - state.current != state.current - state.previous
+                    val candidate = SearchState(
+                        nextCells, next, state.current, nextPath, state.turns + if (turned) 1 else 0,
                     )
-                    val key = candidate.state.signature()
+                    val key = candidate.signature()
                     val existing = candidates[key]
-                    if (existing == null || candidate.state.path.size < existing.state.path.size) {
-                        candidates[key] = candidate
-                    }
+                    if (existing == null || compareRoute(candidate, existing) < 0) candidates[key] = candidate
                 }
             }
-            if (depth == options.maxOrbMoves || candidates.isEmpty()) break
-
-            beam = selectBeam(candidates.values, options.beamWidth, options.goal)
+            if (candidates.isEmpty()) return emptyList<RankedState>() to null
+            // Discard equivalent drag states before performing cascade analysis.
+            val evaluated = candidates.values.map { candidate ->
+                coroutineContext.ensureActive()
+                rank(candidate)
+            }
+            return selectBeam(evaluated, options.beamWidth, strategy) to evaluated.minWithOrNull(::compareResult)
         }
 
+        val initialBest = best
+        suspend fun explore(strategy: Int): RankedState {
+            var beam = initialBeam
+            var passBest = initialBest
+            for (depth in 0 until maxDepth) {
+                if (beam.isEmpty()) break
+                val (advanced, candidate) = advance(beam, strategy)
+                beam = advanced
+                if (candidate != null && compareResult(candidate, passBest) < 0) passBest = candidate
+            }
+            return passBest
+        }
+        // Each pass owns its frontier and best candidate. Merge in fixed strategy
+        // order after both complete, so thread timing cannot change route selection.
+        val explored = if (explorationGoals.size == 1) listOf(explore(0)) else coroutineScope {
+            explorationGoals.indices.map { strategy -> async { explore(strategy) } }.awaitAll()
+        }
+        for (candidate in explored) if (compareResult(candidate, best) < 0) best = candidate
+        if (searchGoals.size > explorationGoals.size && !best.evaluation.goal.satisfied) {
+            val candidate = explore(explorationGoals.size)
+            if (compareResult(candidate, best) < 0) best = candidate
+        }
+
+        coroutineContext.ensureActive()
+        val analysis = best.evaluation.analysis
         return BoardSolution(
             path = best.state.path.map(board::positionOf),
-            predictedMatches = best.analysis,
-            goalSatisfied = best.goal.satisfied,
+            predictedMatches = analysis,
+            goalSatisfied = best.evaluation.goal.satisfied,
             preferredColor = options.goal.preferredColor,
             matchPatternFocus = options.goal.matchPatternFocus,
-            focusedPatternMatchCount = options.goal.matchPatternFocus?.countMatches(
-                best.analysis,
-                options.goal.preferredColor,
-            ),
+            focusedPatternMatchCount = options.goal.matchPatternFocus?.countMatches(analysis, options.goal.preferredColor),
             targetComboCount = options.goal.targetComboCount,
-            comboMinimumSatisfied = options.goal.targetComboCount?.let { best.analysis.comboCount >= it },
+            comboMinimumSatisfied = options.goal.targetComboCount?.let { analysis.comboCount >= it },
             matchPatternSatisfied = options.goal.matchPatternFocus?.let {
-                it.countMatches(best.analysis, options.goal.preferredColor) > 0
+                it.countMatches(analysis, options.goal.preferredColor) > 0
             },
+            requirementsPossible = requirementsPossible,
         )
     }
 
-    private fun rank(state: SearchState, columns: Int, rows: Int, goal: SolveGoal): RankedState {
-        val board = Board(
-            columns = columns,
-            rows = rows,
-            orbs = state.cells.map { code -> Orb(colorOf(code), modifiersOf(code)) },
-        )
-        val analysis = BoardAnalyzer.resolveCascades(board)
-        return RankedState(
-            state = state,
-            analysis = analysis,
-            goal = goal.evaluate(analysis),
-            patternPotential = goal.patternPotential(board),
-            nearMatchCount = nearMatches(state.cells, columns, rows),
-        )
+    private fun compareResult(left: RankedState, right: RankedState): Int {
+        val score = right.evaluation.goal.compareTo(left.evaluation.goal)
+        if (score != 0) return score
+        val combos = right.evaluation.analysis.comboCount.compareTo(left.evaluation.analysis.comboCount)
+        return if (combos != 0) combos else compareRoute(left.state, right.state)
     }
 
-    private fun compareRanked(left: RankedState, right: RankedState): Int {
-        if (left.goal.satisfied != right.goal.satisfied) return right.goal.satisfied.compareTo(left.goal.satisfied)
-        if (left.goal.primaryCriterionSatisfied != right.goal.primaryCriterionSatisfied) {
-            return right.goal.primaryCriterionSatisfied.compareTo(left.goal.primaryCriterionSatisfied)
+    private fun compareSearch(left: RankedState, right: RankedState, strategy: Int): Int {
+        val leftScore = left.evaluation.searchScores[strategy]
+        val rightScore = right.evaluation.searchScores[strategy]
+        val fulfillment = rightScore.compareFulfillment(leftScore)
+        if (fulfillment != 0) return fulfillment
+        if (!leftScore.satisfied) {
+            val potential = right.evaluation.patternPotential.compareTo(left.evaluation.patternPotential)
+            if (potential != 0) return potential
         }
-        if (left.goal.primaryScore != right.goal.primaryScore) {
-            return right.goal.primaryScore.compareTo(left.goal.primaryScore)
-        }
-        if (left.patternPotential != right.patternPotential) {
-            return right.patternPotential.compareTo(left.patternPotential)
-        }
-        if (left.goal.secondaryScore != right.goal.secondaryScore) {
-            return right.goal.secondaryScore.compareTo(left.goal.secondaryScore)
-        }
-        if (left.analysis.comboCount != right.analysis.comboCount) {
-            return right.analysis.comboCount.compareTo(left.analysis.comboCount)
-        }
-        if (left.nearMatchCount != right.nearMatchCount) {
-            return right.nearMatchCount.compareTo(left.nearMatchCount)
-        }
-        return left.state.path.size.compareTo(right.state.path.size)
+        val score = rightScore.compareTo(leftScore)
+        if (score != 0) return score
+        val pairs = right.evaluation.nearMatchCount.compareTo(left.evaluation.nearMatchCount)
+        return if (pairs != 0) pairs else compareRoute(left.state, right.state)
     }
 
-    /**
-     * A combo threshold can be reached before a required pattern is assembled.
-     * Keep a small frontier below the threshold so routes that temporarily trade
-     * combo count for pattern progress are not all pruned at once.
-     */
-    private fun selectBeam(
-        candidates: Collection<RankedState>,
-        beamWidth: Int,
-        goal: SolveGoal,
-    ): List<RankedState> {
-        val ranked = candidates.sortedWith(::compareRanked)
-        if (goal.targetComboCount == null || goal.matchPatternFocus == null || ranked.size <= beamWidth) {
-            return ranked.take(beamWidth)
-        }
+    /** Reserve alternatives by each strategy's fulfillment, independent of the user's combo cutoff. */
+    private fun selectBeam(candidates: Collection<RankedState>, beamWidth: Int, strategy: Int): List<RankedState> {
+        val ranked = candidates.sortedWith { left, right -> compareSearch(left, right, strategy) }
+        if (ranked.size <= beamWidth || beamWidth < FRONTIER_DIVISOR) return ranked.take(beamWidth)
+        val frontiers = ranked.filterNot { it.evaluation.searchScores[strategy].satisfied }
+            .groupBy { it.evaluation.searchScores[strategy].requirements.map(RequirementEvaluation::satisfied) }
+            .values.map { it.iterator() }
+        if (frontiers.isEmpty()) return ranked.take(beamWidth)
 
-        val belowTarget = ranked.filterNot { it.goal.primaryCriterionSatisfied }
-        if (belowTarget.isEmpty()) return ranked.take(beamWidth)
-
-        val reserve = minOf(beamWidth / BELOW_TARGET_BEAM_DIVISOR, belowTarget.size)
-        val selected = ArrayList<RankedState>(beamWidth)
-        selected += ranked.asSequence()
-            .filter { it.goal.primaryCriterionSatisfied }
-            .take(beamWidth - reserve)
-        val selectedStates = selected.toHashSet()
-        val patternFrontier = belowTarget.sortedWith { left, right ->
-            val potentialOrder = right.patternPotential.compareTo(left.patternPotential)
-            if (potentialOrder != 0) potentialOrder else compareRanked(left, right)
-        }
-        for (candidate in patternFrontier) {
-            if (selected.size >= beamWidth) break
-            if (selectedStates.add(candidate)) selected += candidate
+        val selected = LinkedHashSet<RankedState>(beamWidth)
+        selected += ranked.take(beamWidth - beamWidth / FRONTIER_DIVISOR)
+        while (selected.size < beamWidth) {
+            var added = false
+            for (frontier in frontiers) {
+                while (frontier.hasNext()) {
+                    if (selected.add(frontier.next())) {
+                        added = true
+                        break
+                    }
+                }
+                if (selected.size == beamWidth) break
+            }
+            if (!added) break
         }
         if (selected.size < beamWidth) {
             for (candidate in ranked) {
-                if (selected.size >= beamWidth) break
-                if (selectedStates.add(candidate)) selected += candidate
+                selected += candidate
+                if (selected.size == beamWidth) break
             }
         }
-        return selected
+        return selected.toList()
     }
 
-    private fun isBetter(candidate: RankedState, best: RankedState): Boolean {
-        if (candidate.goal.satisfied != best.goal.satisfied) return candidate.goal.satisfied
-        if (candidate.goal.primaryCriterionSatisfied != best.goal.primaryCriterionSatisfied) {
-            return candidate.goal.primaryCriterionSatisfied
-        }
-        if (candidate.goal.primaryScore != best.goal.primaryScore) {
-            return candidate.goal.primaryScore > best.goal.primaryScore
-        }
-        if (candidate.patternPotential != best.patternPotential) {
-            return candidate.patternPotential > best.patternPotential
-        }
-        if (candidate.goal.secondaryScore != best.goal.secondaryScore) {
-            return candidate.goal.secondaryScore > best.goal.secondaryScore
-        }
-        if (candidate.analysis.comboCount != best.analysis.comboCount) {
-            return candidate.analysis.comboCount > best.analysis.comboCount
-        }
-        return candidate.state.path.size < best.state.path.size
+    private fun compareRoute(left: SearchState, right: SearchState): Int {
+        val moves = left.path.size.compareTo(right.path.size)
+        return if (moves != 0) moves else left.turns.compareTo(right.turns)
     }
 
     private fun adjacent(index: Int, columns: Int, rows: Int): IntArray {
@@ -367,9 +252,7 @@ class BoardSolver {
             while (column < columns - 1) {
                 val color = colorOf(cells[row * columns + column])
                 var end = column + 1
-                while (end < columns && color != OrbColor.UNKNOWN &&
-                    colorOf(cells[row * columns + end]) == color
-                ) end++
+                while (end < columns && color != OrbColor.UNKNOWN && colorOf(cells[row * columns + end]) == color) end++
                 if (end - column == 2) pairs++
                 column = end
             }
@@ -379,9 +262,7 @@ class BoardSolver {
             while (row < rows - 1) {
                 val color = colorOf(cells[row * columns + column])
                 var end = row + 1
-                while (end < rows && color != OrbColor.UNKNOWN &&
-                    colorOf(cells[end * columns + column]) == color
-                ) end++
+                while (end < rows && color != OrbColor.UNKNOWN && colorOf(cells[end * columns + column]) == color) end++
                 if (end - row == 2) pairs++
                 row = end
             }
@@ -397,7 +278,6 @@ class BoardSolver {
     }
 
     private fun colorOf(code: Int): OrbColor = OrbColor.entries[code and COLOR_MASK]
-
     private fun modifiersOf(code: Int): Set<OrbModifier> = buildSet {
         if (code and LOCKED_BIT != 0) add(OrbModifier.LOCKED)
         if (code and ENHANCED_BIT != 0) add(OrbModifier.ENHANCED)
@@ -408,26 +288,26 @@ class BoardSolver {
         val current: Int,
         val previous: Int,
         val path: IntArray,
+        val turns: Int = 0,
     ) {
-        fun signature(): String = buildString(cells.size + 1) {
-            cells.forEach { append(('A'.code + it).toChar()) }
-            append(('A'.code + current).toChar())
-            append(('A'.code + previous + 1).toChar())
-        }
+        val layoutKey: String = buildString(cells.size) { cells.forEach { append(('A'.code + it).toChar()) } }
+        fun signature(): String = layoutKey + ('A'.code + current).toChar() + ('A'.code + previous + 1).toChar()
     }
 
-    private data class RankedState(
-        val state: SearchState,
+    private data class BoardEvaluation(
         val analysis: BoardAnalysis,
         val goal: GoalEvaluation,
+        val searchScores: List<GoalEvaluation>,
         val patternPotential: Int,
         val nearMatchCount: Int,
     )
+    private data class RankedState(val state: SearchState, val evaluation: BoardEvaluation)
 
     private companion object {
         const val COLOR_MASK = 0b111
         const val LOCKED_BIT = 1 shl 3
         const val ENHANCED_BIT = 1 shl 4
-        const val BELOW_TARGET_BEAM_DIVISOR = 4
+        const val FRONTIER_DIVISOR = 4
+        const val EVALUATION_CACHE_SIZE = 1024
     }
 }
