@@ -13,10 +13,8 @@ data class SolveSettings(
         require(targetComboCount == null || targetComboCount > 0)
     }
 
-    fun toGoal(): SolveGoal = when {
-        targetComboCount != null -> TargetComboCount(targetComboCount, preferredColor, matchPatternFocus)
-        matchPatternFocus != null -> MaximizeMatchPattern(matchPatternFocus, preferredColor)
-        preferredColor != null -> MaximizeColorDamage(preferredColor)
-        else -> MaximizeCombos
-    }
+    fun toGoal(): SolveGoal = ConfiguredGoal(preferredColor, buildList {
+        targetComboCount?.let { add(ComboMinimum(it)) }
+        matchPatternFocus?.let { add(RequiredPattern(it, preferredColor)) }
+    })
 }

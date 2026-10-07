@@ -22,7 +22,9 @@ Each screen-capture session requires system approval. Notifications are needed f
 
 The recognizer supports the six ordinary orb colors and hearts, and detects enhanced (+) orbs using the marker near each orb's lower-right edge. The marker detector is a visual heuristic and should be checked against more device captures. Hazards and locks are not supported yet; uncertain captures ask for a new capture. The board-only color-damage estimate includes the 6% per enhanced orb match bonus, but excludes team awakenings and other team or enemy modifiers.
 
-The solver uses a bounded beam search to find high-combo routes and prefers shorter routes when combo counts tie. It does not use the in-game timer. Like other bounded searches, it is not guaranteed to find the global optimum; the search objective and move bound are isolated so future goal types and complexity settings can be added.
+The solver uses a bounded beam search with deterministic gravity cascades and no random skyfall. Combo minimums and attacking-color pattern requirements must be met first; qualifying routes maximize the selected color's board-damage estimate, or total combos when no color is selected. A pattern requirement means at least one match, rather than maximizing pattern count. Score ties prefer fewer moves, then fewer turns. Pattern progress guides the search frontier but does not rank final solutions. Requests proven impossible by orb inventory or board space return immediately for adjustment.
+
+Color-focused solves run two bounded searches concurrently, independently of the selected combo minimum, then share their candidates. An additional search targets the requested requirements if needed. Equal results remain deterministic across workers. The solver does not use the in-game timer and does not guarantee a global optimum.
 
 ## Project structure
 

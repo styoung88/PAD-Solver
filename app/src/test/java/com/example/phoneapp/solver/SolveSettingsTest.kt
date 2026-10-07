@@ -4,50 +4,60 @@ import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardPosition
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbMatch
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertThrows
+import org.junit.Assert.*
 import org.junit.Test
 
 class SolveSettingsTest {
-    private val analysis = BoardAnalysis(listOf(
-        OrbMatch(OrbColor.WOOD, (0..3).map { BoardPosition(0, it) }.toSet()),
-        OrbMatch(OrbColor.FIRE, (0..2).map { BoardPosition(2, it) }.toSet()),
-    ))
+    private val analysis = BoardAnalysis(listOf(match(OrbColor.WOOD, 4), match(OrbColor.FIRE, 3)))
 
     @Test
-    fun sharedSettingsPreserveGoalPriorityAndScores() {
-        val cases = listOf(
-            SolveSettings() to GoalEvaluation(true, primaryScore = 2),
-            SolveSettings(OrbColor.WOOD) to GoalEvaluation(true, primaryScore = 2500, secondaryScore = 2),
-            SolveSettings(matchPatternFocus = MatchPattern.TPA) to
-                GoalEvaluation(true, primaryScore = 1, secondaryScore = 2),
-            SolveSettings(OrbColor.WOOD, matchPatternFocus = MatchPattern.TPA) to
-                GoalEvaluation(true, primaryScore = 1, secondaryScore = 2500),
-            SolveSettings(targetComboCount = 1) to GoalEvaluation(true, primaryScore = 2, secondaryScore = 2),
-            SolveSettings(OrbColor.WOOD, 1) to GoalEvaluation(true, primaryScore = 2500, secondaryScore = 2),
-            SolveSettings(targetComboCount = 1, matchPatternFocus = MatchPattern.TPA) to
-                GoalEvaluation(true, primaryScore = 1, secondaryScore = 2),
-            SolveSettings(OrbColor.WOOD, 1, MatchPattern.TPA) to
-                GoalEvaluation(true, primaryScore = 1, secondaryScore = 2500),
-            SolveSettings(OrbColor.WOOD, 3, MatchPattern.TPA) to
-                GoalEvaluation(false, primaryScore = 2, secondaryScore = 2),
-            SolveSettings(OrbColor.WOOD, 1, MatchPattern.CROSS) to
-                GoalEvaluation(false, primaryCriterionSatisfied = true, primaryScore = 0, secondaryScore = 2500),
-        )
-        for ((settings, expected) in cases) {
-            val goal = settings.toGoal()
-            assertEquals(settings.toString(), expected, goal.evaluate(analysis))
-            assertEquals(settings.preferredColor, goal.preferredColor)
-            assertEquals(settings.targetComboCount, goal.targetComboCount)
-            assertEquals(settings.matchPatternFocus, goal.matchPatternFocus)
+    fun requirementsDoNotChangeTheSelectedDamageOrComboObjective() {
+        for (color in listOf(null, OrbColor.WOOD)) {
+            for (target in listOf(null, 1)) {
+                for (pattern in listOf(null, MatchPattern.TPA)) {
+                    val settings = SolveSettings(color, target, pattern)
+                    val goal = settings.toGoal()
+                    val result = goal.evaluate(analysis)
+                    assertTrue(result.satisfied)
+                    assertEquals(if (color == null) 2L else 2500L, result.primaryScore)
+                    assertEquals(2, result.secondaryScore)
+                    assertEquals(color, goal.preferredColor)
+                    assertEquals(target, goal.targetComboCount)
+                    assertEquals(pattern, goal.matchPatternFocus)
+                }
+            }
         }
     }
 
     @Test
+    fun aRequiredPatternDoesNotRewardExtraPatternsAheadOfDamage() {
+        val goal = SolveSettings(OrbColor.WOOD, matchPatternFocus = MatchPattern.TPA).toGoal()
+        val twoTpas = BoardAnalysis(listOf(match(OrbColor.WOOD, 4), match(OrbColor.WOOD, 4)))
+        val higherDamage = BoardAnalysis(listOf(match(OrbColor.WOOD, 4), match(OrbColor.WOOD, 6), match(OrbColor.FIRE, 3)))
+        assertEquals(5000L, goal.evaluate(twoTpas).primaryScore)
+        assertEquals(7200L, goal.evaluate(higherDamage).primaryScore)
+        assertTrue(goal.evaluate(higherDamage) > goal.evaluate(twoTpas))
+    }
+
+    @Test
+    fun allRequirementsMustPassAndUnmetComboProgressRetainsPriority() {
+        val goal = SolveSettings(OrbColor.WOOD, 3, MatchPattern.TPA).toGoal()
+        val belowMinimum = goal.evaluate(analysis)
+        assertFalse(belowMinimum.satisfied)
+        assertEquals(listOf(RequirementEvaluation(2, 3), RequirementEvaluation(1, 1)), belowMinimum.requirements)
+        val threeCombosNoTpa = goal.evaluate(BoardAnalysis(List(3) { match(OrbColor.WOOD, 3) }))
+        assertFalse(threeCombosNoTpa.satisfied)
+        assertTrue(threeCombosNoTpa > belowMinimum)
+        val fourCombos = goal.evaluate(BoardAnalysis(List(4) { match(OrbColor.WOOD, 3) }))
+        assertTrue(fourCombos > threeCombosNoTpa)
+        val oneComboWithTpa = goal.evaluate(BoardAnalysis(listOf(match(OrbColor.WOOD, 4))))
+        val twoCombosNoTpa = goal.evaluate(BoardAnalysis(List(2) { match(OrbColor.WOOD, 3) }))
+        assertTrue(twoCombosNoTpa > oneComboWithTpa)
+    }
+
+    @Test
     fun onlyAttackingColorsAndPositiveTargetsAreValidSettings() {
-        for (color in OrbColor.attackingColors) {
-            assertEquals(color, SolveSettings(color, 6).toGoal().preferredColor)
-        }
+        for (color in OrbColor.attackingColors) assertEquals(color, SolveSettings(color, 6).toGoal().preferredColor)
         for (color in listOf(OrbColor.HEART, OrbColor.UNKNOWN)) {
             assertThrows(IllegalArgumentException::class.java) { SolveSettings(color) }
         }
@@ -55,4 +65,7 @@ class SolveSettingsTest {
             assertThrows(IllegalArgumentException::class.java) { SolveSettings(targetComboCount = target) }
         }
     }
+
+    private fun match(color: OrbColor, size: Int): OrbMatch =
+        OrbMatch(color, (0 until size).map { BoardPosition(0, it) }.toSet())
 }

@@ -273,7 +273,7 @@ fun SolveSettingsDrawer(
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "Selected combo and pattern requirements must both be met. Color damage ranks routes that meet them. " +
+                                "Meet the combo minimum and at least one selected pattern match, then maximize color damage or combos. " +
                                     "The estimate includes match size, combos, and + orbs; team and enemy modifiers are excluded.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -340,22 +340,34 @@ fun SolutionScreen(
             SolverAppBar(onOpenSettings, !isSolving)
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("${solution.comboCount} combos", style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        RouteStat("${solution.orbMoves}", "Orb moves", Modifier.weight(1f))
-                        RouteStat("${solution.predictedMatches.cascadeCount}", "Cascades", Modifier.weight(1f))
-                        if (solution.preferredColor != null && preferredColorComboCount != null) {
-                            RouteStat("$preferredColorComboCount", "${orbColorName(solution.preferredColor)} combos", Modifier.weight(1f))
-                        }
+                    val resultTitle = when {
+                        !solution.requirementsPossible -> "No solution for these settings"
+                        !solution.goalSatisfied -> "Best attempt: ${solution.comboCount} combos"
+                        else -> "${solution.comboCount} combos"
                     }
-                    solution.matchPatternFocus?.let {
-                        Text("${solution.focusedPatternMatchCount ?: 0} ${it.displayName} matches",
-                            style = MaterialTheme.typography.bodyMedium)
+                    Text(resultTitle, style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold)
+                    if (solution.requirementsPossible) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            RouteStat("${solution.orbMoves}", "Orb moves", Modifier.weight(1f))
+                            RouteStat("${solution.predictedMatches.cascadeCount}", "Cascades", Modifier.weight(1f))
+                            if (solution.preferredColor != null && preferredColorComboCount != null) {
+                                RouteStat("$preferredColorComboCount", "${orbColorName(solution.preferredColor)} combos", Modifier.weight(1f))
+                            }
+                        }
+                        solution.matchPatternFocus?.let {
+                            Text("${solution.focusedPatternMatchCount ?: 0} ${it.displayName} matches",
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                     SolveSettingsSummary(solution.preferredColor, solution.targetComboCount, solution.matchPatternFocus)
                     if (unmetRequirements.isNotEmpty()) {
-                        Text("Could not find a route that meets ${unmetRequirements.joinToString(" and ")}. Showing the best attempt.",
+                        val message = if (solution.requirementsPossible) {
+                            "Could not find a route that meets ${unmetRequirements.joinToString(" and ")}. Showing the best attempt."
+                        } else {
+                            "The captured board does not have enough orbs or space to meet the selected requirements. Adjust settings to try again."
+                        }
+                        Text(message,
                             color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     }
                 }

@@ -14,9 +14,9 @@ data class BoardAnalysis(
     val cascadeWaves: List<List<OrbMatch>> = listOf(matches),
 ) {
     /** The first-wave matches plus any combos created by gravity. */
-    val comboCount: Int get() = cascadeWaves.sumOf { it.size }
+    val comboCount: Int = cascadeWaves.sumOf { it.size }
     val cascadeCount: Int get() = (cascadeWaves.size - 1).coerceAtLeast(0)
-    val allMatches: List<OrbMatch> get() = cascadeWaves.flatten()
+    val allMatches: List<OrbMatch> = cascadeWaves.flatten()
 }
 
 object BoardAnalyzer {

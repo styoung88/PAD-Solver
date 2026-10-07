@@ -8,23 +8,36 @@ import com.example.phoneapp.board.OrbMatch
 import java.util.concurrent.ConcurrentHashMap
 
 /** PAD match formations that can be required by a solve goal. */
-enum class MatchPattern(val displayName: String) {
-    ROW("Row"),
-    TPA("TPA"),
-    L_SHAPE("L shape"),
-    CROSS("Cross"),
-    VDP("VDP (3×3 square)");
+enum class MatchPattern(val displayName: String, private val minimumOrbs: Int) {
+    ROW("Row", 6),
+    TPA("TPA", 4),
+    L_SHAPE("L shape", 5),
+    CROSS("Cross", 5),
+    VDP("VDP (3×3 square)", 9);
 
     fun countMatches(analysis: BoardAnalysis, color: OrbColor? = null): Int =
         analysis.allMatches.sumOf { match ->
-            if (color != null && match.color != color) 0 else countIn(match)
+            if (!match.color.isAttacking || color != null && match.color != color) 0 else countIn(match)
         }
+
+    /** Necessary inventory and geometry checks, without assuming a route is reachable. */
+    fun canForm(board: Board, color: OrbColor? = null): Boolean {
+        if (color != null && !color.isAttacking) return false
+        val shapes = cachedTemplates(board.columns, board.rows)
+        if (shapes.isEmpty()) return false
+        val counts = board.orbs.groupingBy { it.color }.eachCount()
+        return (color?.let(::listOf) ?: OrbColor.attackingColors).any { (counts[it] ?: 0) >= minimumOrbs }
+    }
+
+    private fun cachedTemplates(columns: Int, rows: Int): List<Set<BoardPosition>> =
+        templateCache.computeIfAbsent(Triple(this, columns, rows)) { templates(columns, rows) }
 
     /**
      * Counts the best partial arrangement of this pattern currently on the board.
      * This is a beam-search heuristic only; it does not make a route satisfy the goal.
      */
     fun potentialScore(board: Board, color: OrbColor? = null): Int {
+        if (color != null && !color.isAttacking) return 0
         // TPA is the common expensive case when no color is selected: the
         // beam search evaluates every route candidate, and the generic shape
         // path below allocates collections for each of the 36 line templates
@@ -33,8 +46,7 @@ enum class MatchPattern(val displayName: String) {
         if (this == TPA) return tpaPotentialScore(board, color)
 
         // Each pattern has different geometry even when board dimensions match.
-        val key = Triple(this, board.columns, board.rows)
-        val shapes = templateCache.computeIfAbsent(key) { templates(board.columns, board.rows) }
+        val shapes = cachedTemplates(board.columns, board.rows)
         val colors = if (color == null) OrbColor.attackingColors else listOf(color)
         val orbPositionsByColor = colors.associateWith { candidateColor ->
             board.orbs.mapIndexedNotNull { index, orb ->
@@ -45,6 +57,7 @@ enum class MatchPattern(val displayName: String) {
         var bestScore = 0
         for (shape in shapes) {
             for (candidateColor in colors) {
+                if (orbPositionsByColor.getValue(candidateColor).size < minimumOrbs) continue
                 val matchingPositions = shape.filter { position -> board[position].color == candidateColor }
                 val coverage = matchingPositions.size
                 if (coverage < bestCoverage) continue
@@ -97,6 +110,7 @@ enum class MatchPattern(val displayName: String) {
         for (window in windows) {
             for (candidateColor in selectedColors) {
                 val colorOrdinal = candidateColor.ordinal
+                if (colorCounts[colorOrdinal] < minimumOrbs) continue
                 var coverage = 0
                 var run = 0
                 var longestRun = 0
@@ -296,10 +310,17 @@ enum class MatchPattern(val displayName: String) {
 
     private fun countIn(match: OrbMatch): Int = when (this) {
         ROW -> countRows(match)
-        TPA -> if (match.size == 4) 1 else 0
+        TPA -> if (match.positions.isStraightFour()) 1 else 0
         L_SHAPE -> if (match.positions.isLShape()) 1 else 0
         CROSS -> if (match.positions.isCross()) 1 else 0
         VDP -> if (match.positions.isThreeByThreeSquare()) 1 else 0
+    }
+
+    private fun Set<BoardPosition>.isStraightFour(): Boolean {
+        if (size != 4) return false
+        val start = first()
+        return all { it.row == start.row } && maxOf { it.column } - minOf { it.column } == 3 ||
+            all { it.column == start.column } && maxOf { it.row } - minOf { it.row } == 3
     }
 
     private fun countRows(match: OrbMatch): Int = match.positions

@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardAnalysis
+import com.example.phoneapp.board.BoardAnalyzer
 import com.example.phoneapp.board.BoardPosition
 import com.example.phoneapp.board.Orb
 import com.example.phoneapp.board.OrbColor
@@ -58,10 +59,35 @@ class BoardScreenRegressionTest {
             }
         }
         compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
+        compose.onNodeWithText("Best attempt: 0 combos").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Could not find a route that meets at least 5 combos and a Wood TPA match. Showing the best attempt.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Adjust settings").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(1, settingsOpened) }
+    }
+
+    @Test
+    fun provenImpossibleRequirementsExplainTheBoardLimitAndOfferAdjustment() {
+        val board = Board(orbs = ("DDDFFF" + "FFDFFF" + "DFFFDD" + "DFFFFD" + "FDFFFD")
+            .map { Orb(if (it == 'D') OrbColor.DARK else OrbColor.FIRE) })
+        val analysis = BoardAnalyzer.resolveCascades(board)
+        assertEquals(3, analysis.comboCount)
+        val solution = BoardSolution(listOf(BoardPosition(0, 0)), analysis,
+            goalSatisfied = false, preferredColor = OrbColor.LIGHT,
+            targetComboCount = 7, comboMinimumSatisfied = false,
+            matchPatternFocus = MatchPattern.L_SHAPE, focusedPatternMatchCount = 0, matchPatternSatisfied = false,
+            requirementsPossible = false)
+        compose.setContent { MaterialTheme { SolutionScreen(recognized.copy(board = board), solution, false, {}, {}, {}) } }
+        compose.onNodeWithText("No solution for these settings").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("3 combos").assertDoesNotExist()
+        compose.onNodeWithText("Orb moves").assertDoesNotExist()
+        compose.onNodeWithText("Cascades").assertDoesNotExist()
+        compose.onNodeWithText("Light combos").assertDoesNotExist()
+        compose.onNodeWithText("0 L shape matches").assertDoesNotExist()
+        compose.onNodeWithText("The captured board does not have enough orbs or space to meet the selected requirements. Adjust settings to try again.")
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
+        compose.onNodeWithText("Adjust settings").performScrollTo().assertIsDisplayed()
     }
 
     @Test
