@@ -59,7 +59,7 @@ class BoardScreenRegressionTest {
             }
         }
         compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
-        compose.onNodeWithText("Best attempt: 0 combos").assertIsDisplayed()
+        compose.onNodeWithText("Best attempt: 0 combos").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Could not find a route that meets at least 5 combos and a Wood TPA match. Showing the best attempt.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Adjust settings").performScrollTo().performClick()
@@ -78,7 +78,7 @@ class BoardScreenRegressionTest {
             matchPatternFocus = MatchPattern.L_SHAPE, focusedPatternMatchCount = 0, matchPatternSatisfied = false,
             requirementsPossible = false)
         compose.setContent { MaterialTheme { SolutionScreen(recognized.copy(board = board), solution, false, {}, {}, {}) } }
-        compose.onNodeWithText("No solution for these settings").assertIsDisplayed()
+        compose.onNodeWithText("No solution for these settings").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("3 combos").assertDoesNotExist()
         compose.onNodeWithText("Orb moves").assertDoesNotExist()
         compose.onNodeWithText("Cascades").assertDoesNotExist()
