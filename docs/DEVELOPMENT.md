@@ -8,6 +8,7 @@ Follow `AGENTS.md` for branches, commits, merges, and authorized phone updates.
 - For direct Gradle commands, use Android Studio's bundled JDK, `%LOCALAPPDATA%/Android/Sdk`, `%USERPROFILE%/.gradle`, and the checkout's `.android-user-home` for `ANDROID_USER_HOME`. Prefer `--offline` when dependencies are cached.
 - Gradle tasks: `:app:assembleDebug`, `:app:testDebugUnitTest`, `:app:lintDebug`, `:app:connectedDebugAndroidTest` (`.\gradlew.bat` on Windows).
 - JVM tests: `app/src/test`; device tests: `app/src/androidTest`; committed image fixtures: `app/src/androidTest/assets`.
+- Validate route appearance over `pad-color-variance-reference.jpg`, with dense revisits crossing all six orb colors.
 - UI tests require an unlocked phone. Keep it awake during testing and restore its prior wake setting and preferences afterward.
 - Measure solver performance on the phone with `BoardSolverPerformanceTest`; read medians from `SolverParallelTiming`. Keep warm-ups, repeated samples, and result equality checks; do not assert timing thresholds.
 - On the phone, pass `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true` to retain app data and permissions. Otherwise cleanup can uninstall the app and reset them. Reinstall the debug app with the install script after tests.

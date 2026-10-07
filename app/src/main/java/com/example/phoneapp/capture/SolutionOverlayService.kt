@@ -389,7 +389,6 @@ class SolutionOverlayService : Service() {
                 ),
                 columns = Board.DEFAULT_COLUMNS,
                 rows = Board.DEFAULT_ROWS,
-                density = resources.displayMetrics.density,
                 endpointCenters = points.first() to points.last(),
                 preparedRoute = preparedRoute,
             )

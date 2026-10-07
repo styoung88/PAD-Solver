@@ -390,7 +390,7 @@ fun SolutionScreen(
         }
         BoardCaption(
             if (unmetRequirements.isEmpty()) "Suggested route" else "Captured board",
-            if (unmetRequirements.isEmpty()) "Start at green, end at red" else "Adjust settings to try another route",
+            if (unmetRequirements.isEmpty()) "Start at green, follow numbers to red" else "Adjust settings to try another route",
         )
         CapturedOrbBoard(recognition, if (unmetRequirements.isEmpty()) solution.path else emptyList())
     }
@@ -611,7 +611,6 @@ fun OrbBoard(
                 bounds = android.graphics.RectF(0f, 0f, size.width, size.height),
                 columns = board.columns,
                 rows = board.rows,
-                density = density,
                 preparedRoute = preparedRoute,
             )
         }
