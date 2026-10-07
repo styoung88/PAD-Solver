@@ -35,3 +35,6 @@ replay_pid*
 
 # Keep the Gradle wrapper JAR under version control if one is added
 !gradle/wrapper/gradle-wrapper.jar
+
+# Local Play release configuration
+release.properties
