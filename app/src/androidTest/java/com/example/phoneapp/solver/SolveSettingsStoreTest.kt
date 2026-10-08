@@ -81,4 +81,18 @@ class SolveSettingsStoreTest {
         assertFalse(preferences.contains("board_size_override"))
         assertEquals(settings, store.load())
     }
+
+    @Test
+    fun searchLevelsPersistAndInvalidValuesUseMedium() {
+        val store = SolveSettingsStore(preferences)
+        for (movement in OrbMovement.entries) {
+            for (complexity in SearchComplexity.entries) {
+                val settings = SolveSettings(orbMovement = movement, searchComplexity = complexity)
+                store.save(settings)
+                assertEquals(settings, SolveSettingsStore(preferences).load())
+            }
+        }
+        preferences.edit().putInt("orb_movement", 1).putString("search_complexity", "OLD").commit()
+        assertEquals(SolveSettings(), store.load())
+    }
 }

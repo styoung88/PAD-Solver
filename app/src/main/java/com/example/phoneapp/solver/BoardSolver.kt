@@ -20,7 +20,7 @@ import kotlin.coroutines.coroutineContext
 data class SolveOptions(
     /** Search bound in grid transitions, independent of the game's move timer. */
     val maxOrbMoves: Int = 40,
-    val beamWidth: Int = 192,
+    val beamWidth: Int = SearchComplexity.DEFAULT_BEAM_WIDTH,
     val goal: SolveGoal = MaximizeCombos,
 ) {
     init {

@@ -21,7 +21,7 @@ class BoardSizeSolverTest {
             }.shuffled(Random(42)))
             val options = SolveOptions.forBoard(board, SolveSettings(matchPatternFocus = MatchPattern.ROW).toGoal()).copy(beamWidth = 24)
             assertEquals(limit, options.maxOrbMoves)
-            assertEquals(192, SolveOptions.forBoard(board).beamWidth)
+            assertEquals(200, SolveOptions.forBoard(board).beamWidth)
             for (selected in listOf(options, options.copy(maxOrbMoves = 2))) {
                 val result = BoardSolver().solve(board, selected)
                 assertTrue(result.orbMoves <= selected.maxOrbMoves)

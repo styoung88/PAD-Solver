@@ -18,7 +18,6 @@ import com.example.phoneapp.capture.PadBoardRecognizer
 import com.example.phoneapp.capture.SolutionOverlayService
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.BoardSolver
-import com.example.phoneapp.solver.SolveOptions
 import com.example.phoneapp.solver.SolveSettings
 import com.example.phoneapp.solver.SolveSettingsStore
 import kotlinx.coroutines.Dispatchers
@@ -90,13 +89,12 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
         solveJob = viewModelScope.launch {
             val runId = ++solveRunId
             val startedAt = SystemClock.elapsedRealtime()
-            val goal = settings.toGoal()
             Log.i(
                 SOLVER_LOG_TAG,
                 "solve[$runId] start color=${settings.preferredColor} " +
                     "targetCombos=${settings.targetComboCount} pattern=${settings.matchPatternFocus}",
             )
-            runCatching { BoardSolver().solve(board, SolveOptions.forBoard(board, goal)) }
+            runCatching { BoardSolver().solve(board, settings.toOptions(board)) }
                 .onSuccess { result ->
                     Log.i(
                         SOLVER_LOG_TAG,

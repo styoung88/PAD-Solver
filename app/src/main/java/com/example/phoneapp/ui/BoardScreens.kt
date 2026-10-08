@@ -70,6 +70,8 @@ import com.example.phoneapp.capture.PhotoAccess
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.MatchPattern
 import com.example.phoneapp.solver.SolveSettings
+import com.example.phoneapp.solver.OrbMovement
+import com.example.phoneapp.solver.SearchComplexity
 import com.example.phoneapp.solver.comboCapacity
 
 @Composable
@@ -299,6 +301,44 @@ fun SolveSettingsDrawer(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text("Search settings", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(8.dp))
+                            ChoiceDropdown(
+                                selectedValue = settings.orbMovement,
+                                choices = OrbMovement.entries.map { it to it.displayName },
+                                label = "Orb movement",
+                                enabled = !isSolving,
+                                onSelected = { value -> value?.let { onSettingsChanged(settings.copy(orbMovement = it)) } },
+                            )
+                            Text(
+                                board?.let { "Up to ${settings.toOptions(it).maxOrbMoves} moves." }
+                                    ?: "The default depends on board size.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (settings.orbMovement == OrbMovement.HIGH) {
+                                Text("More orb moves can make the route harder to read and increase solve time.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            }
+                            Spacer(Modifier.height(16.dp))
+                            ChoiceDropdown(
+                                selectedValue = settings.searchComplexity,
+                                choices = SearchComplexity.entries.map { it to it.displayName },
+                                label = "Search complexity",
+                                enabled = !isSolving,
+                                onSelected = { value -> value?.let { onSettingsChanged(settings.copy(searchComplexity = it)) } },
+                            )
+                            Text("A more complex search explores more routes.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (settings.searchComplexity == SearchComplexity.HIGH || settings.searchComplexity == SearchComplexity.VERY_HIGH) {
+                                Text("Increasing search complexity can increase solve time. Better results are not guaranteed.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
                     Spacer(Modifier.height(20.dp))
