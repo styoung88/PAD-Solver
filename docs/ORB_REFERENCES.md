@@ -4,6 +4,8 @@ The detector combines ordinary color-ring sampling with central-symbol luminance
 
 After fitting the grid, symbol matching also searches offsets up to 0.08 cell widths and scales from 0.9 to 1.1. Every color competes across the same alignments, with a stronger jammer confidence requirement for this wider search.
 
+Grid candidates are ranked by combined color and spacing evidence, including partially recognized grids. Unresolved cells are retried at nearby sample positions after geometry is fitted. A stronger grid with unreadable cells requires another capture instead of falling back to a weaker region of battle artwork.
+
 Reference artwork and test images:
 
 - `drop_01.png` through `drop_10.png`: [PAD orb artwork](https://github.com/Mapaler/PADDashFormation/tree/master/images/project%20file/orbs), also the source of the symbol samples in `OrbSymbolTemplates.kt`.
@@ -11,6 +13,7 @@ Reference artwork and test images:
 - `locked.jpg` and `bomb.jpg`: game-art examples from [AppMedia's board mechanics guide](https://appmedia.jp/pazudora/789324).
 - `weakened.png`: game-board crop from [GameWith's weakened-orb guide](https://xn--0ck4aw2h.gamewith.jp/article/show/361312).
 - `jammer-capture.jpg` and `poison-route-capture.jpg`: user-supplied game screenshots, including a route overlay over poison orbs.
+- `seven-by-six-route-capture.jpg`: user-supplied framed 7×6 board with a route overlay and battle artwork above it.
 
 Puzzle & Dragons artwork belongs to its respective owners. Reference images are used for symbol identification and recognition tests; application board graphics are drawn separately.
 

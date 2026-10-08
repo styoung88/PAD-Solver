@@ -16,6 +16,46 @@ import org.junit.Test
 
 class PadBoardRecognizerHazardTest {
     @Test
+    fun unresolvedCellDoesNotFallBackToBattleArtwork() {
+        val source = load("seven-by-six-route-capture.jpg")
+        val image = source.copy(Bitmap.Config.ARGB_8888, true)
+        source.recycle()
+        try {
+            // Completely hide a heart; its neighbors still establish the real grid.
+            Canvas(image).drawRect(404f, 1011f, 482f, 1090f, Paint().apply { color = Color.BLACK })
+            assertTrue("An unreadable board must require another capture",
+                PadBoardRecognizer().recognize(image) is BoardRecognition.Uncertain)
+        } finally { image.recycle() }
+    }
+
+    @Test
+    fun locatesSevenBySixBoardBelowBattleArtDespiteExistingRoute() {
+        val image = load("seven-by-six-route-capture.jpg")
+        try {
+            val result = PadBoardRecognizer().recognize(image)
+            assertTrue("$result", result is BoardRecognition.Recognized)
+            result as BoardRecognition.Recognized
+            assertEquals(7, result.board.columns)
+            assertEquals(6, result.board.rows)
+            assertEquals("bounds=${result.boardBounds}", 777f, result.boardBounds.top, 4f)
+            assertEquals("bounds=${result.boardBounds}", 1247f, result.boardBounds.bottom, 4f)
+            for (row in 0 until 6) for (column in 0 until 7) {
+                assertEquals("column=$column bounds=${result.boardBounds}", 52f + column * 78.3f,
+                    result.boardBounds.left + (column + 0.5f) * result.boardBounds.width() / 7, 4f)
+                assertEquals("row=$row bounds=${result.boardBounds}", 816f + row * 78f,
+                    result.boardBounds.top + (row + 0.5f) * result.boardBounds.height() / 6, 4f)
+            }
+            val colors = mapOf('F' to OrbColor.FIRE, 'W' to OrbColor.WATER, 'G' to OrbColor.WOOD,
+                'L' to OrbColor.LIGHT, 'D' to OrbColor.DARK, 'H' to OrbColor.HEART, 'J' to OrbColor.JAMMER)
+            assertEquals(listOf("GLLWGHH", "GDHJDDW", "DDWHHLF", "JFLJWHW", "LHGWDGW", "GHWWGGD")
+                .joinToString("").map { colors.getValue(it) }, result.board.orbs.map { it.color })
+            assertEquals(setOf(5, 6, 9, 18, 26, 29, 36).associateWith { setOf(OrbModifier.ENHANCED) },
+                result.board.orbs.withIndex().filter { it.value.modifiers.isNotEmpty() }
+                    .associate { it.index to it.value.modifiers })
+        } finally { image.recycle() }
+    }
+
+    @Test
     fun recognizesHazardsInUserCapturesIncludingRouteOverlay() {
         val captures = listOf(
             Triple("poison-route-capture.jpg", "WGFFPGDLHGDFHDLFLLFWDWHFPFHGWP", setOf(3, 28)),
