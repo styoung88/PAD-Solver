@@ -151,6 +151,7 @@ class SolutionOverlayService : Service() {
                 if (result.goalSatisfied) {
                     showRoute(recognized.boardBounds, result.path.map(recognized.board::indexOf).toIntArray(),
                         recognized.captureWidth, recognized.captureHeight, recognized.board.columns, recognized.board.rows)
+                    toolbarView?.setStatus("${result.comboCount} combos")
                 } else {
                     toolbarView?.setStatus("No matching route. Adjust your settings.", isError = true)
                 }
@@ -231,6 +232,9 @@ class SolutionOverlayService : Service() {
             return START_NOT_STICKY
         }
         showRoute(bounds, positions, captureWidth, captureHeight, columns, rows)
+        if (intent.hasExtra(EXTRA_COMBO_COUNT)) {
+            toolbarView?.setStatus("${intent.getIntExtra(EXTRA_COMBO_COUNT, 0)} combos")
+        }
         return START_NOT_STICKY
     }
 
@@ -402,6 +406,7 @@ class SolutionOverlayService : Service() {
     }
 
     companion object {
+        const val EXTRA_COMBO_COUNT = "combo_count"
         @Volatile var enabled = false
             private set
         const val ACTION_PROCESSING = "com.example.phoneapp.action.PROCESSING"

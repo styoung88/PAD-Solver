@@ -88,7 +88,7 @@ class SolveSettingsDrawerTest {
         compose.activityRule.scenario.recreate()
         loadCapture(openSettings = true)
         waitForText("Apply and solve")
-        compose.onNodeWithText("6 combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("6").performScrollTo().assertIsDisplayed()
         selectChoice("Optimize color damage for", "Dark")
         assertEquals(com.example.phoneapp.board.OrbColor.DARK, SolveSettingsStore(compose.activity).load().preferredColor)
         selectChoice("Match pattern", "Cross")
@@ -97,7 +97,7 @@ class SolveSettingsDrawerTest {
         compose.activityRule.scenario.recreate()
         // The capture intent retains the overlay's request to open settings.
         waitForText("Apply and solve")
-        compose.onNodeWithText("6 combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("6").performScrollTo().assertIsDisplayed()
         assertEquals(com.example.phoneapp.board.OrbColor.DARK, SolveSettingsStore(compose.activity).load().preferredColor)
         compose.onNodeWithText("Dark").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Cross").performScrollTo().assertIsDisplayed()

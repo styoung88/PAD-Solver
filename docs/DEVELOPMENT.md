@@ -5,6 +5,7 @@ Follow `AGENTS.md` for branches, commits, merges, and authorized phone updates.
 ## Build and device checks
 
 - Install with `scripts/install-debug-to-device.ps1`; it selects the sole authorized physical phone. Use `-Serial` only when needed.
+- The user's phone uses wireless debugging. Before reporting no connected phone, check `adb devices -l` and `adb mdns services` for a paired wireless device; connect its advertised debugging endpoint with `adb connect`, then retry the install script. If pairing is required, ask for the phone's pairing endpoint and code.
 - For direct Gradle commands, use Android Studio's bundled JDK, `%LOCALAPPDATA%/Android/Sdk`, `%USERPROFILE%/.gradle`, and the checkout's `.android-user-home` for `ANDROID_USER_HOME`. Prefer `--offline` when dependencies are cached.
 - Gradle tasks: `:app:assembleDebug`, `:app:testDebugUnitTest`, `:app:lintDebug`, `:app:connectedDebugAndroidTest` (`.\gradlew.bat` on Windows).
 - JVM tests: `app/src/test`; device tests: `app/src/androidTest`; committed image fixtures: `app/src/androidTest/assets`.

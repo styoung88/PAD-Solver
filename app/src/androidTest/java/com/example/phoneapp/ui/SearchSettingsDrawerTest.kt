@@ -38,9 +38,12 @@ class SearchSettingsDrawerTest {
         val movementWarning = "More orb moves can make the route harder to read and increase solve time."
         val complexityWarning = "Increasing search complexity can increase solve time. Better results are not guaranteed."
         compose.onNodeWithText("Open drawer").performClick()
+        compose.onNodeWithText("Orb movement count").assertDoesNotExist()
+        compose.onNodeWithText("Search complexity").assertDoesNotExist()
+        compose.onNodeWithText("Advanced settings").performScrollTo().performClick()
         compose.onNodeWithText(movementWarning).assertDoesNotExist()
         compose.onNodeWithText(complexityWarning).assertDoesNotExist()
-        compose.onNodeWithText("Orb movement").performScrollTo().performClick()
+        compose.onNodeWithText("Orb movement count").performScrollTo().performClick()
         compose.onNode(hasText("High") and hasAnyAncestor(isPopup())).performClick()
         compose.onNodeWithText(movementWarning).performScrollTo().assertIsDisplayed()
         compose.runOnIdle {
@@ -53,11 +56,18 @@ class SearchSettingsDrawerTest {
             compose.onNodeWithText(complexityWarning).performScrollTo().assertIsDisplayed()
             compose.runOnIdle { assertEquals(level, settings.value.searchComplexity) }
         }
-        compose.onNodeWithText("Orb movement").performScrollTo().performClick()
+        compose.onNodeWithText("Orb movement count").performScrollTo().performClick()
         compose.onNode(hasText("Low") and hasAnyAncestor(isPopup())).performClick()
         compose.onNodeWithText(movementWarning).assertDoesNotExist()
         compose.onNodeWithText("Search complexity").performScrollTo().performClick()
         compose.onNode(hasText("Medium") and hasAnyAncestor(isPopup())).performClick()
         compose.onNodeWithText(complexityWarning).assertDoesNotExist()
+        compose.onNodeWithText("Advanced settings").performScrollTo().performClick()
+        compose.onNodeWithText("Orb movement count").assertDoesNotExist()
+        compose.onNodeWithText("Search complexity").assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(OrbMovement.LOW, settings.value.orbMovement)
+            assertEquals(SearchComplexity.MEDIUM, settings.value.searchComplexity)
+        }
     }
 }
