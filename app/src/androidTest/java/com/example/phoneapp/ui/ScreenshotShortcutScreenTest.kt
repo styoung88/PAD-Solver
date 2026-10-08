@@ -73,22 +73,22 @@ class ScreenshotShortcutScreenTest {
         compose.runOnIdle { assertEquals(1, settings) }
     }
 
-    @Test fun selectedAccessExplainsTheLimitationButKeepsBothManualActionsAvailable() {
-        showLimitedAccess(PhotoAccess.SELECTED, "To detect new screenshots, PAD Solver needs access to all photos. You’ve allowed selected photos only. You can still tap Capture.")
+    @Test fun selectedAccessKeepsManualActionsAndPhotoManagementAvailable() {
+        showLimitedAccess(PhotoAccess.SELECTED)
     }
 
-    @Test fun deniedAccessExplainsTheLimitationButKeepsBothManualActionsAvailable() {
-        showLimitedAccess(PhotoAccess.NONE, "Allow access to all photos so PAD Solver can detect new screenshots. Capture works without photo access.")
+    @Test fun deniedAccessKeepsManualActionsAndPhotoManagementAvailable() {
+        showLimitedAccess(PhotoAccess.NONE)
     }
 
-    private fun showLimitedAccess(access: PhotoAccess, message: String) {
+    private fun showLimitedAccess(access: PhotoAccess) {
         var captures = 0
         var picks = 0
         var permissions = 0
         compose.setContent { MaterialTheme {
             HomeScreen({ captures++ }, { picks++ }, true, access, {}, { permissions++ })
         } }
-        compose.onNodeWithText(message).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Take a screenshot while the overlay is open to solve your board.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Open PAD overlay").performScrollTo().performClick()
         compose.onNodeWithText("Choose existing screenshot").performScrollTo().performClick()
         compose.runOnIdle {
@@ -113,7 +113,7 @@ class ScreenshotShortcutScreenTest {
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Manage photo access").assertDoesNotExist()
         compose.onNodeWithContentDescription("Enable screenshots").performScrollTo().performClick()
-        compose.onNodeWithText("Use Capture in the overlay, or choose a saved screenshot.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Take a screenshot while the overlay is open to solve your board.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Manage photo access").assertDoesNotExist()
     }
 }

@@ -75,12 +75,12 @@ class BoardScreenRegressionTest {
             }
         }
         compose.onNodeWithText("Open drawer").performClick()
-        compose.onNodeWithText("10 combos (exceeds board size)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("10 (exceeds board size)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("This board has enough orbs for at most 6 combos without skyfall. Choose a lower minimum or capture a new board.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Minimum combos").performScrollTo().performClick()
-        compose.onNode(hasText("7 combos") and hasAnyAncestor(isPopup())).assertDoesNotExist()
-        compose.onNode(hasText("6 combos") and hasAnyAncestor(isPopup())).performScrollTo().performClick()
+        compose.onNode(hasText("7") and hasAnyAncestor(isPopup())).assertDoesNotExist()
+        compose.onNode(hasText("6") and hasAnyAncestor(isPopup())).performScrollTo().performClick()
         compose.runOnIdle { assertEquals(6, settings.value.targetComboCount) }
     }
 

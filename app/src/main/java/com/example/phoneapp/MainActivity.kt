@@ -311,6 +311,7 @@ class MainActivity : ComponentActivity() {
             putExtra(SolutionOverlayService.EXTRA_BOARD_COLUMNS, recognized.board.columns)
             putExtra(SolutionOverlayService.EXTRA_BOARD_ROWS, recognized.board.rows)
             putExtra(SolutionOverlayService.EXTRA_PATH, result.path.map(recognized.board::indexOf).toIntArray())
+            putExtra(SolutionOverlayService.EXTRA_COMBO_COUNT, result.comboCount)
         }
         ContextCompat.startForegroundService(this, overlayIntent)
 

@@ -3,6 +3,7 @@ package com.example.phoneapp.ui
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +55,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
@@ -116,7 +119,7 @@ internal fun HomeScreen(
     Column(
         modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         val resources = LocalResources.current
@@ -130,48 +133,47 @@ internal fun HomeScreen(
             },
             confirmButton = { TextButton(onClick = { privacyVisible.value = false }) { Text("Close") } },
         )
-        SolverAppBar(onOpenSettings, enabled = true)
-        TextButton(onClick = { privacyVisible.value = true }) { Text("Privacy policy") }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Find your next route.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-            Text("Solve a board and follow the route in PAD.",
-                style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Solve while you play", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Tap Capture in the floating toolbar, or enable screenshots below to solve screenshots you take while playing.")
-                Button(onClick = onCapture, modifier = Modifier.fillMaxWidth()) { Text("Open PAD overlay") }
-                Text("Screen sharing is requested only when you tap Capture.", style = MaterialTheme.typography.bodySmall)
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            SolverAppBar(onOpenSettings, enabled = true)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Find your next route.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                Text("Solve a board and follow the route in PAD.",
+                    style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        }
-        Card {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Solve a saved board", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Pick a screenshot to review and solve. Show the route in PAD when you’re ready.")
-                OutlinedButton(onClick = onChooseScreenshot, modifier = Modifier.fillMaxWidth()) { Text("Choose existing screenshot") }
-            }
-        }
-        Card {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Enable screenshots", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Switch(checked = screenshotShortcutEnabled, onCheckedChange = onScreenshotShortcutChanged,
-                        modifier = Modifier.semantics { contentDescription = "Enable screenshots" })
-                }
-                Text("While the overlay is open, PAD Solver reads photo names and folders to find new screenshots and processes matching images on this device. Images are not uploaded. Needs full photo access; turn this off or close the overlay to stop.",
-                    style = MaterialTheme.typography.bodyMedium)
-                Text(when {
-                    !screenshotShortcutEnabled -> "Use Capture in the overlay, or choose a saved screenshot."
-                    photoAccess == PhotoAccess.FULL -> "Take a screenshot while the overlay is open to solve your board."
-                    photoAccess == PhotoAccess.SELECTED -> "To detect new screenshots, PAD Solver needs access to all photos. You’ve allowed selected photos only. You can still tap Capture."
-                    else -> "Allow access to all photos so PAD Solver can detect new screenshots. Capture works without photo access."
-                }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (screenshotShortcutEnabled && photoAccess != PhotoAccess.FULL) {
-                    TextButton(onClick = onManagePhotoAccess) { Text("Manage photo access") }
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Solve while you play", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Tap Capture in the floating toolbar, or enable screenshots below to solve screenshots you take while playing.")
+                    Button(onClick = onCapture, modifier = Modifier.fillMaxWidth()) { Text("Open PAD overlay") }
                 }
             }
+            Card {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Solve a saved board", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Pick a screenshot to review and solve. Show the route in PAD when you’re ready.")
+                    OutlinedButton(onClick = onChooseScreenshot, modifier = Modifier.fillMaxWidth()) { Text("Choose existing screenshot") }
+                }
+            }
+            Card {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Enable screenshots", style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Switch(checked = screenshotShortcutEnabled, onCheckedChange = onScreenshotShortcutChanged,
+                            modifier = Modifier.semantics { contentDescription = "Enable screenshots" })
+                    }
+                    Text("Take a screenshot while the overlay is open to solve your board.")
+                    if (screenshotShortcutEnabled && photoAccess != PhotoAccess.FULL) {
+                        TextButton(onClick = onManagePhotoAccess) { Text("Manage photo access") }
+                    }
+                }
+            }
+        }
+        TextButton(onClick = { privacyVisible.value = true }, modifier = Modifier.align(Alignment.End)) {
+            Text("Privacy policy")
         }
     }
 }
@@ -240,6 +242,7 @@ fun SolveSettingsDrawer(
     content: @Composable (openSettings: () -> Unit) -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    var advancedExpanded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(openRequested) {
         if (openRequested) {
@@ -259,7 +262,7 @@ fun SolveSettingsDrawer(
                     Text("Solve settings", style = MaterialTheme.typography.headlineSmall)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Choose how the route is optimized. Your captured board stays available.",
+                        "Choose how the route is optimized",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -296,8 +299,7 @@ fun SolveSettingsDrawer(
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "Meet the combo minimum and at least one selected pattern match, then maximize color damage or combos. " +
-                                    "The estimate includes match size, combos, and + orbs; team and enemy modifiers are excluded.",
+                                "Meet the combo minimum and at least one selected pattern match, then maximize color damage or combos.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -306,38 +308,50 @@ fun SolveSettingsDrawer(
                     Spacer(Modifier.height(20.dp))
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                            Text("Search settings", style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(8.dp))
-                            ChoiceDropdown(
-                                selectedValue = settings.orbMovement,
-                                choices = OrbMovement.entries.map { it to it.displayName },
-                                label = "Orb movement",
-                                enabled = !isSolving,
-                                onSelected = { value -> value?.let { onSettingsChanged(settings.copy(orbMovement = it)) } },
-                            )
-                            Text(
-                                board?.let { "Up to ${settings.toOptions(it).maxOrbMoves} moves." }
-                                    ?: "The default depends on board size.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (settings.orbMovement == OrbMovement.HIGH) {
-                                Text("More orb moves can make the route harder to read and increase solve time.",
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clickable(role = Role.Button) { advancedExpanded = !advancedExpanded }
+                                    .semantics {
+                                        stateDescription = if (advancedExpanded) "Expanded" else "Collapsed"
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("Advanced settings", style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.weight(1f))
+                                Text(if (advancedExpanded) "−" else "+")
                             }
-                            Spacer(Modifier.height(16.dp))
-                            ChoiceDropdown(
-                                selectedValue = settings.searchComplexity,
-                                choices = SearchComplexity.entries.map { it to it.displayName },
-                                label = "Search complexity",
-                                enabled = !isSolving,
-                                onSelected = { value -> value?.let { onSettingsChanged(settings.copy(searchComplexity = it)) } },
-                            )
-                            Text("A more complex search explores more routes.",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (settings.searchComplexity == SearchComplexity.HIGH || settings.searchComplexity == SearchComplexity.VERY_HIGH) {
-                                Text("Increasing search complexity can increase solve time. Better results are not guaranteed.",
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            if (advancedExpanded) {
+                                Spacer(Modifier.height(8.dp))
+                                ChoiceDropdown(
+                                    selectedValue = settings.orbMovement,
+                                    choices = OrbMovement.entries.map { it to it.displayName },
+                                    label = "Orb movement count",
+                                    enabled = !isSolving,
+                                    onSelected = { value -> value?.let { onSettingsChanged(settings.copy(orbMovement = it)) } },
+                                )
+                                if (board != null) Text(
+                                    "Up to ${settings.toOptions(board).maxOrbMoves} moves.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (settings.orbMovement == OrbMovement.HIGH) {
+                                    Text("More orb moves can make the route harder to read and increase solve time.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                }
+                                Spacer(Modifier.height(16.dp))
+                                ChoiceDropdown(
+                                    selectedValue = settings.searchComplexity,
+                                    choices = SearchComplexity.entries.map { it to it.displayName },
+                                    label = "Search complexity",
+                                    enabled = !isSolving,
+                                    onSelected = { value -> value?.let { onSettingsChanged(settings.copy(searchComplexity = it)) } },
+                                )
+                                Text("A more complex search explores more routes.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (settings.searchComplexity == SearchComplexity.HIGH || settings.searchComplexity == SearchComplexity.VERY_HIGH) {
+                                    Text("Increasing search complexity can increase solve time. Better results are not guaranteed.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                }
                             }
                         }
                     }
@@ -451,7 +465,7 @@ fun SolutionScreen(
         }
         BoardCaption(
             if (unmetRequirements.isEmpty()) "Suggested route" else "Captured board",
-            if (unmetRequirements.isEmpty()) "Start at green, follow numbers to red" else "Adjust settings to try another route",
+            if (unmetRequirements.isEmpty()) "Start at green and end at red" else "Adjust settings to try another route",
         )
         CapturedOrbBoard(recognition, if (unmetRequirements.isEmpty()) solution.path else emptyList())
     }
@@ -562,7 +576,7 @@ private fun ComboTargetDropdown(
     ChoiceDropdown(
         selectedValue = selectedTarget,
         choices = listOf(null to "No minimum") + targets.map {
-            it to if (it > maximumTarget) "$it combos (exceeds board size)" else "$it combos"
+            it to if (it > maximumTarget) "$it (exceeds board size)" else "$it"
         },
         label = "Minimum combos",
         enabled = enabled,
