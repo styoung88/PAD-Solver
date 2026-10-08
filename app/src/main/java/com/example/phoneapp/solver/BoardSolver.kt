@@ -282,6 +282,7 @@ class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Defa
         var code = orb.color.ordinal
         if (OrbModifier.LOCKED in orb.modifiers) code = code or LOCKED_BIT
         if (OrbModifier.ENHANCED in orb.modifiers) code = code or ENHANCED_BIT
+        if (OrbModifier.WEAKENED in orb.modifiers) code = code or WEAKENED_BIT
         return code
     }
 
@@ -289,6 +290,7 @@ class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Defa
     private fun modifiersOf(code: Int): Set<OrbModifier> = buildSet {
         if (code and LOCKED_BIT != 0) add(OrbModifier.LOCKED)
         if (code and ENHANCED_BIT != 0) add(OrbModifier.ENHANCED)
+        if (code and WEAKENED_BIT != 0) add(OrbModifier.WEAKENED)
     }
 
     private data class SearchState(
@@ -312,9 +314,10 @@ class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Defa
     private data class RankedState(val state: SearchState, val evaluation: BoardEvaluation)
 
     private companion object {
-        const val COLOR_MASK = 0b111
-        const val LOCKED_BIT = 1 shl 3
-        const val ENHANCED_BIT = 1 shl 4
+        const val COLOR_MASK = 0b1111
+        const val LOCKED_BIT = 1 shl 4
+        const val ENHANCED_BIT = 1 shl 5
+        const val WEAKENED_BIT = 1 shl 6
         const val FRONTIER_DIVISOR = 4
         const val EVALUATION_CACHE_SIZE = 1024
     }

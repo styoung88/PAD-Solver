@@ -4,6 +4,7 @@ data class OrbMatch(
     val color: OrbColor,
     val positions: Set<BoardPosition>,
     val enhancedOrbCount: Int = 0,
+    val weakenedOrbCount: Int = 0,
 ) {
     val size: Int get() = positions.size
 }
@@ -88,6 +89,9 @@ object BoardAnalyzer {
                         positions = positions,
                         enhancedOrbCount = positions.count { position ->
                             OrbModifier.ENHANCED in board[position].modifiers
+                        },
+                        weakenedOrbCount = positions.count { position ->
+                            OrbModifier.WEAKENED in board[position].modifiers
                         },
                     ),
                 )

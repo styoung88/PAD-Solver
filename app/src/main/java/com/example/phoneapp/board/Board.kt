@@ -7,6 +7,10 @@ enum class OrbColor {
     LIGHT,
     DARK,
     HEART,
+    JAMMER,
+    POISON,
+    LETHAL_POISON,
+    BOMB,
     UNKNOWN;
 
     val isAttacking: Boolean get() = this in attackingColors
@@ -20,6 +24,7 @@ enum class OrbColor {
 enum class OrbModifier {
     LOCKED,
     ENHANCED,
+    WEAKENED,
 }
 
 data class Orb(
