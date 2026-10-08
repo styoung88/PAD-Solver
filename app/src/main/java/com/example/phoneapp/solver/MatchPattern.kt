@@ -17,7 +17,7 @@ enum class MatchPattern(val displayName: String, private val minimumOrbs: Int) {
 
     fun countMatches(analysis: BoardAnalysis, color: OrbColor? = null): Int =
         analysis.allMatches.sumOf { match ->
-            if (!match.color.isAttacking || color != null && match.color != color) 0 else countIn(match)
+            if (!match.color.isAttacking || color != null && match.color != color) 0 else countIn(match, analysis.columns)
         }
 
     /** Necessary inventory and geometry checks, without assuming a route is reachable. */
@@ -26,8 +26,10 @@ enum class MatchPattern(val displayName: String, private val minimumOrbs: Int) {
         val shapes = cachedTemplates(board.columns, board.rows)
         if (shapes.isEmpty()) return false
         val counts = board.orbs.groupingBy { it.color }.eachCount()
-        return (color?.let(::listOf) ?: OrbColor.attackingColors).any { (counts[it] ?: 0) >= minimumOrbs }
+        return (color?.let(::listOf) ?: OrbColor.attackingColors).any { (counts[it] ?: 0) >= requiredOrbs(board) }
     }
+
+    private fun requiredOrbs(board: Board): Int = if (this == ROW) board.columns else minimumOrbs
 
     private fun cachedTemplates(columns: Int, rows: Int): List<Set<BoardPosition>> =
         templateCache.computeIfAbsent(Triple(this, columns, rows)) { templates(columns, rows) }
@@ -57,7 +59,7 @@ enum class MatchPattern(val displayName: String, private val minimumOrbs: Int) {
         var bestScore = 0
         for (shape in shapes) {
             for (candidateColor in colors) {
-                if (orbPositionsByColor.getValue(candidateColor).size < minimumOrbs) continue
+                if (orbPositionsByColor.getValue(candidateColor).size < requiredOrbs(board)) continue
                 val matchingPositions = shape.filter { position -> board[position].color == candidateColor }
                 val coverage = matchingPositions.size
                 if (coverage < bestCoverage) continue
@@ -308,8 +310,8 @@ enum class MatchPattern(val displayName: String, private val minimumOrbs: Int) {
         return distance
     }
 
-    private fun countIn(match: OrbMatch): Int = when (this) {
-        ROW -> countRows(match)
+    private fun countIn(match: OrbMatch, columns: Int): Int = when (this) {
+        ROW -> countRows(match, columns)
         TPA -> if (match.positions.isStraightFour()) 1 else 0
         L_SHAPE -> if (match.positions.isLShape()) 1 else 0
         CROSS -> if (match.positions.isCross()) 1 else 0
@@ -323,18 +325,11 @@ enum class MatchPattern(val displayName: String, private val minimumOrbs: Int) {
             all { it.column == start.column } && maxOf { it.row } - minOf { it.row } == 3
     }
 
-    private fun countRows(match: OrbMatch): Int = match.positions
+    private fun countRows(match: OrbMatch, width: Int): Int = match.positions
         .groupBy(BoardPosition::row)
         .values
         .count { cells ->
-            val columns = cells.map(BoardPosition::column).sorted()
-            var runLength = 1
-            var hasRow = false
-            for ((left, right) in columns.zipWithNext()) {
-                runLength = if (right == left + 1) runLength + 1 else 1
-                if (runLength >= 6) hasRow = true
-            }
-            hasRow
+            cells.size == width && cells.all { it.column in 0 until width }
         }
 
     private fun Set<BoardPosition>.isLShape(): Boolean {
@@ -385,9 +380,7 @@ enum class MatchPattern(val displayName: String, private val minimumOrbs: Int) {
     private fun templates(columns: Int, rows: Int): List<Set<BoardPosition>> = buildList {
         when (this@MatchPattern) {
             ROW -> for (row in 0 until rows) {
-                for (left in 0..(columns - 6)) {
-                    add((left until left + 6).map { BoardPosition(row, it) }.toSet())
-                }
+                if (columns >= 3) add((0 until columns).map { BoardPosition(row, it) }.toSet())
             }
             TPA -> {
                 for (row in 0 until rows) for (left in 0..(columns - 4)) {

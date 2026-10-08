@@ -25,6 +25,7 @@ internal class SolveSettingsStore(private val preferences: SharedPreferences) {
             else putInt(TARGET_COMBO_COUNT_KEY, settings.targetComboCount)
             if (settings.matchPatternFocus == null) remove(MATCH_PATTERN_KEY)
             else putString(MATCH_PATTERN_KEY, settings.matchPatternFocus.name)
+            remove(LEGACY_BOARD_SIZE_KEY)
         }.apply()
     }
 
@@ -33,5 +34,6 @@ internal class SolveSettingsStore(private val preferences: SharedPreferences) {
         const val PREFERRED_COLOR_KEY = "preferred_orb_color"
         const val TARGET_COMBO_COUNT_KEY = "target_combo_count"
         const val MATCH_PATTERN_KEY = "match_pattern"
+        const val LEGACY_BOARD_SIZE_KEY = "board_size_override"
     }
 }

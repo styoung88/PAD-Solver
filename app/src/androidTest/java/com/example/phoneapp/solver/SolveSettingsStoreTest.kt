@@ -67,6 +67,18 @@ class SolveSettingsStoreTest {
         assertFalse(preferences.contains("preferred_orb_color"))
         assertFalse(preferences.contains("target_combo_count"))
         assertFalse(preferences.contains("match_pattern"))
+        assertFalse(preferences.contains("board_size_override"))
         assertEquals(true, preferences.getBoolean("unrelated", false))
+    }
+
+    @Test
+    fun ignoresAndClearsLegacyBoardSizeWithoutLosingGoals() {
+        preferences.edit().putString("board_size_override", "LARGE").putInt("target_combo_count", 14).commit()
+        val store = SolveSettingsStore(preferences)
+        val settings = SolveSettings(targetComboCount = 14)
+        assertEquals(settings, store.load())
+        store.save(settings)
+        assertFalse(preferences.contains("board_size_override"))
+        assertEquals(settings, store.load())
     }
 }

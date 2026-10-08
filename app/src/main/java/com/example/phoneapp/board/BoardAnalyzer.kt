@@ -12,6 +12,8 @@ data class BoardAnalysis(
     val matches: List<OrbMatch>,
     /** One list of matches for each simultaneous clear, starting with the first clear. */
     val cascadeWaves: List<List<OrbMatch>> = listOf(matches),
+    val columns: Int = Board.DEFAULT_COLUMNS,
+    val rows: Int = Board.DEFAULT_ROWS,
 ) {
     /** The first-wave matches plus any combos created by gravity. */
     val comboCount: Int = cascadeWaves.sumOf { it.size }
@@ -91,7 +93,7 @@ object BoardAnalyzer {
                 )
             }
         }
-        return BoardAnalysis(groups)
+        return BoardAnalysis(groups, columns = board.columns, rows = board.rows)
     }
 
     /**
@@ -113,6 +115,8 @@ object BoardAnalyzer {
         return BoardAnalysis(
             matches = waves.firstOrNull().orEmpty(),
             cascadeWaves = waves,
+            columns = board.columns,
+            rows = board.rows,
         )
     }
 

@@ -21,6 +21,7 @@ import com.example.phoneapp.capture.SolutionOverlayService
 import com.example.phoneapp.solver.SolveSettings
 import com.example.phoneapp.solver.SolveSettingsStore
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -66,7 +67,7 @@ class SolveSettingsDrawerTest {
         compose.onNodeWithText("Apply and recalculate").performScrollTo().performClick()
         waitForText("Fire combos")
         compose.onNodeWithText("Wood combos").assertDoesNotExist()
-        compose.onNodeWithText("Show route in PAD").assertIsDisplayed()
+        compose.onNodeWithText("Show route in PAD").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -89,12 +90,15 @@ class SolveSettingsDrawerTest {
         waitForText("Apply and solve")
         compose.onNodeWithText("6 combos").performScrollTo().assertIsDisplayed()
         selectChoice("Optimize color damage for", "Dark")
+        assertEquals(com.example.phoneapp.board.OrbColor.DARK, SolveSettingsStore(compose.activity).load().preferredColor)
         selectChoice("Match pattern", "Cross")
+        assertEquals(com.example.phoneapp.board.OrbColor.DARK, SolveSettingsStore(compose.activity).load().preferredColor)
         compose.onNodeWithText("Close").performScrollTo().performClick()
         compose.activityRule.scenario.recreate()
         // The capture intent retains the overlay's request to open settings.
         waitForText("Apply and solve")
         compose.onNodeWithText("6 combos").performScrollTo().assertIsDisplayed()
+        assertEquals(com.example.phoneapp.board.OrbColor.DARK, SolveSettingsStore(compose.activity).load().preferredColor)
         compose.onNodeWithText("Dark").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Cross").performScrollTo().assertIsDisplayed()
     }
@@ -132,7 +136,7 @@ class SolveSettingsDrawerTest {
 
     private fun selectChoice(label: String, choice: String) {
         compose.onNodeWithText(label).performScrollTo().performClick()
-        compose.onNode(hasText(choice) and hasAnyAncestor(isPopup())).performClick()
+        compose.onNode(hasText(choice) and hasAnyAncestor(isPopup())).performScrollTo().performClick()
     }
 
     private fun waitForText(text: String) {

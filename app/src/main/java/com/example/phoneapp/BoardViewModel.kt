@@ -96,7 +96,7 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
                 "solve[$runId] start color=${settings.preferredColor} " +
                     "targetCombos=${settings.targetComboCount} pattern=${settings.matchPatternFocus}",
             )
-            runCatching { BoardSolver().solve(board, SolveOptions(goal = goal)) }
+            runCatching { BoardSolver().solve(board, SolveOptions.forBoard(board, goal)) }
                 .onSuccess { result ->
                     Log.i(
                         SOLVER_LOG_TAG,

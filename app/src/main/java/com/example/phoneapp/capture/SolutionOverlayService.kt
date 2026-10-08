@@ -21,6 +21,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import com.example.phoneapp.board.Board
+import com.example.phoneapp.board.BoardSize
 import com.example.phoneapp.board.BoardPosition
 import com.example.phoneapp.board.RouteArrowRenderer
 import com.example.phoneapp.MainActivity
@@ -134,6 +135,7 @@ class SolutionOverlayService : Service() {
         toolbarView?.setStatus("Reading board…", busy = true)
         solveJob = scope.launch {
             try {
+                val settings = settingsStore.load()
                 val recognized = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     val bitmap = BoardImageLoader.read(this@SolutionOverlayService, uri) ?: return@withContext null
                     try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
@@ -146,10 +148,10 @@ class SolutionOverlayService : Service() {
                     return@launch
                 }
                 toolbarView?.setStatus("Finding your route…", busy = true)
-                val settings = settingsStore.load()
-                val result = BoardSolver().solve(recognized.board, SolveOptions(goal = settings.toGoal()))
+                val result = BoardSolver().solve(recognized.board, SolveOptions.forBoard(recognized.board, settings.toGoal()))
                 if (result.goalSatisfied) {
-                    showRoute(recognized.boardBounds, result.path.map(recognized.board::indexOf).toIntArray(), recognized.captureWidth, recognized.captureHeight)
+                    showRoute(recognized.boardBounds, result.path.map(recognized.board::indexOf).toIntArray(),
+                        recognized.captureWidth, recognized.captureHeight, recognized.board.columns, recognized.board.rows)
                 } else {
                     toolbarView?.setStatus("No matching route. Adjust your settings.", isError = true)
                 }
@@ -222,18 +224,21 @@ class SolutionOverlayService : Service() {
         }
         val captureWidth = intent.getIntExtra(EXTRA_CAPTURE_WIDTH, 0)
         val captureHeight = intent.getIntExtra(EXTRA_CAPTURE_HEIGHT, 0)
-        if (captureWidth <= 0 || captureHeight <= 0 || positions.isEmpty()) {
+        val columns = intent.getIntExtra(EXTRA_BOARD_COLUMNS, Board.DEFAULT_COLUMNS)
+        val rows = intent.getIntExtra(EXTRA_BOARD_ROWS, Board.DEFAULT_ROWS)
+        if (captureWidth <= 0 || captureHeight <= 0 || positions.isEmpty() ||
+            BoardSize.of(columns, rows) == null || positions.any { it !in 0 until columns * rows }) {
             stopSelf()
             return START_NOT_STICKY
         }
-        showRoute(bounds, positions, captureWidth, captureHeight)
+        showRoute(bounds, positions, captureWidth, captureHeight, columns, rows)
         return START_NOT_STICKY
     }
 
-    private fun showRoute(bounds: RectF, positions: IntArray, captureWidth: Int, captureHeight: Int) {
+    private fun showRoute(bounds: RectF, positions: IntArray, captureWidth: Int, captureHeight: Int, columns: Int, rows: Int) {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         routeView?.let { runCatching { windowManager?.removeView(it) } }
-        val view = RouteOverlayView(this, bounds, positions, captureWidth, captureHeight)
+        val view = RouteOverlayView(this, bounds, positions, captureWidth, captureHeight, columns, rows)
         routeView = view
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -351,20 +356,22 @@ class SolutionOverlayService : Service() {
         else startForeground(43, notification)
     }
 
-    private class RouteOverlayView(
+    internal class RouteOverlayView(
         context: android.content.Context,
         private val boardBounds: RectF,
         private val path: IntArray,
         private val captureWidth: Int,
         private val captureHeight: Int,
+        private val columns: Int,
+        private val rows: Int,
     ) : View(context) {
         private val positions = path.map { index ->
-            BoardPosition(index / Board.DEFAULT_COLUMNS, index % Board.DEFAULT_COLUMNS)
+            BoardPosition(index / columns, index % columns)
         }
         private val preparedRoute = RouteArrowRenderer.prepareRoute(
             positions,
-            Board.DEFAULT_COLUMNS,
-            Board.DEFAULT_ROWS,
+            columns,
+            rows,
         )
 
         override fun onDraw(canvas: Canvas) {
@@ -375,8 +382,8 @@ class SolutionOverlayService : Service() {
             // Preserve the overlay coordinates from before arrow rendering
             // (57fff16), calculated in screenshot space before scaling.
             val points = positions.map { position ->
-                ((boardBounds.left + (position.column + 0.5f) * boardBounds.width() / Board.DEFAULT_COLUMNS) * scaleX) to
-                    ((boardBounds.top + (position.row + 0.5f) * boardBounds.height() / Board.DEFAULT_ROWS) * scaleY)
+                ((boardBounds.left + (position.column + 0.5f) * boardBounds.width() / columns) * scaleX) to
+                    ((boardBounds.top + (position.row + 0.5f) * boardBounds.height() / rows) * scaleY)
             }
             RouteArrowRenderer.draw(
                 canvas = canvas,
@@ -387,8 +394,8 @@ class SolutionOverlayService : Service() {
                     boardBounds.right * scaleX,
                     boardBounds.bottom * scaleY,
                 ),
-                columns = Board.DEFAULT_COLUMNS,
-                rows = Board.DEFAULT_ROWS,
+                columns = columns,
+                rows = rows,
                 endpointCenters = points.first() to points.last(),
                 preparedRoute = preparedRoute,
             )
@@ -412,5 +419,7 @@ class SolutionOverlayService : Service() {
         const val EXTRA_BOARD_BOUNDS = "route_board_bounds"
         const val EXTRA_CAPTURE_WIDTH = "route_capture_width"
         const val EXTRA_CAPTURE_HEIGHT = "route_capture_height"
+        const val EXTRA_BOARD_COLUMNS = "route_board_columns"
+        const val EXTRA_BOARD_ROWS = "route_board_rows"
     }
 }
