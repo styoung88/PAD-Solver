@@ -26,7 +26,6 @@ import com.example.phoneapp.board.BoardPosition
 import com.example.phoneapp.board.RouteArrowRenderer
 import com.example.phoneapp.MainActivity
 import com.example.phoneapp.solver.BoardSolver
-import com.example.phoneapp.solver.SolveOptions
 import com.example.phoneapp.solver.SolveSettingsStore
 import com.example.phoneapp.util.dpToPx
 import com.example.phoneapp.util.parcelableExtra
@@ -148,7 +147,7 @@ class SolutionOverlayService : Service() {
                     return@launch
                 }
                 toolbarView?.setStatus("Finding your route…", busy = true)
-                val result = BoardSolver().solve(recognized.board, SolveOptions.forBoard(recognized.board, settings.toGoal()))
+                val result = BoardSolver().solve(recognized.board, settings.toOptions(recognized.board))
                 if (result.goalSatisfied) {
                     showRoute(recognized.boardBounds, result.path.map(recognized.board::indexOf).toIntArray(),
                         recognized.captureWidth, recognized.captureHeight, recognized.board.columns, recognized.board.rows)
