@@ -22,13 +22,22 @@ internal object OrbSymbolTemplates {
     ).map { (color, encoded) -> color to normalize(FloatArray(encoded.length) { encoded[it].digitToInt(16).toFloat() }) }
 
     fun classify(values: FloatArray): Pair<OrbColor, Float>? {
-        val normalized = normalize(values)
         val scores = FloatArray(OrbColor.entries.size)
+        accumulateScores(values, scores)
+        return selectHazard(scores)
+    }
+
+    /** Keep the strongest pose for every color, including the ordinary competitors. */
+    fun accumulateScores(values: FloatArray, scores: FloatArray) {
+        val normalized = normalize(values)
         for ((color, template) in samples) {
             var correlation = 0f
             for (index in normalized.indices) correlation += normalized[index] * template[index]
             scores[color.ordinal] = maxOf(scores[color.ordinal], correlation)
         }
+    }
+
+    fun selectHazard(scores: FloatArray, jammerThreshold: Float = 0.60f): Pair<OrbColor, Float>? {
         var bestColor = OrbColor.UNKNOWN
         var best = 0f
         var second = 0f
@@ -40,7 +49,7 @@ internal object OrbSymbolTemplates {
                 bestColor = color
             } else if (correlation > second) second = correlation
         }
-        val threshold = if (bestColor == OrbColor.JAMMER) 0.60f else 0.78f
+        val threshold = if (bestColor == OrbColor.JAMMER) jammerThreshold else 0.78f
         return if (bestColor in HAZARDS && best >= threshold && best - second >= 0.15f) bestColor to best else null
     }
 

@@ -2,12 +2,15 @@
 
 The detector combines ordinary color-ring sampling with central-symbol luminance templates for jammers, poison, lethal poison, and bombs. Templates use a 13×13 grid at 0.052 cell-width spacing, centered in a 50×50 cell; luminance is quantized to 16 levels and normalized before comparison. Both ordinary and hazard symbols compete so similar colors alone do not establish a hazard.
 
+After fitting the grid, symbol matching also searches offsets up to 0.08 cell widths and scales from 0.9 to 1.1. Every color competes across the same alignments, with a stronger jammer confidence requirement for this wider search.
+
 Reference artwork and test images:
 
 - `drop_01.png` through `drop_10.png`: [PAD orb artwork](https://github.com/Mapaler/PADDashFormation/tree/master/images/project%20file/orbs), also the source of the symbol samples in `OrbSymbolTemplates.kt`.
 - `J*.png`: independent jammer cell samples from [OrbAI's image dataset](https://github.com/Eclipseop/OrbAI/tree/master/data).
 - `locked.jpg` and `bomb.jpg`: game-art examples from [AppMedia's board mechanics guide](https://appmedia.jp/pazudora/789324).
 - `weakened.png`: game-board crop from [GameWith's weakened-orb guide](https://xn--0ck4aw2h.gamewith.jp/article/show/361312).
+- `jammer-capture.jpg` and `poison-route-capture.jpg`: user-supplied game screenshots, including a route overlay over poison orbs.
 
 Puzzle & Dragons artwork belongs to its respective owners. Reference images are used for symbol identification and recognition tests; application board graphics are drawn separately.
 

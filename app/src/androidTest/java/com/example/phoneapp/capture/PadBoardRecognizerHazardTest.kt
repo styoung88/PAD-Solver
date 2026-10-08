@@ -16,6 +16,30 @@ import org.junit.Test
 
 class PadBoardRecognizerHazardTest {
     @Test
+    fun recognizesHazardsInUserCapturesIncludingRouteOverlay() {
+        val captures = listOf(
+            Triple("poison-route-capture.jpg", "WGFFPGDLHGDFHDLFLLFWDWHFPFHGWP", setOf(3, 28)),
+            Triple("jammer-capture.jpg", "JDGLLJJJLLHLLHDDHGDDHHLHGLGHDD", setOf(1, 2, 3, 14, 18, 24, 29)),
+        )
+        val colors = mapOf('F' to OrbColor.FIRE, 'W' to OrbColor.WATER, 'G' to OrbColor.WOOD,
+            'L' to OrbColor.LIGHT, 'D' to OrbColor.DARK, 'H' to OrbColor.HEART,
+            'J' to OrbColor.JAMMER, 'P' to OrbColor.POISON)
+        for ((file, expected, enhanced) in captures) {
+            val image = load(file)
+            try {
+                val result = PadBoardRecognizer().recognize(image)
+                assertTrue("$file: $result", result is BoardRecognition.Recognized)
+                result as BoardRecognition.Recognized
+                assertEquals("$file bounds=${result.boardBounds}", expected.map { colors.getValue(it) },
+                    result.board.orbs.map { it.color })
+                assertEquals("$file modifiers", enhanced.map { it to setOf(OrbModifier.ENHANCED) }.toMap(),
+                    result.board.orbs.withIndex().filter { it.value.modifiers.isNotEmpty() }
+                        .associate { it.index to it.value.modifiers })
+            } finally { image.recycle() }
+        }
+    }
+
+    @Test
     fun recognizesMixedHazardBoardsAtEverySize() {
         for (size in BoardSize.entries) for (width in listOf(420, 720)) {
             val image = referenceGrid(size, width)
