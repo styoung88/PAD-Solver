@@ -40,7 +40,6 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
     private var solveRunId = 0
     private var solveJob: kotlinx.coroutines.Job? = null
     private var boardLoadJob: kotlinx.coroutines.Job? = null
-    private var imageDecoder: (() -> android.graphics.Bitmap?)? = null
     fun loadCapture(path: String) {
         loadImage { android.graphics.BitmapFactory.decodeFile(path) }
     }
@@ -50,8 +49,6 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadImage(decodeBitmap: () -> android.graphics.Bitmap?) {
-        imageDecoder = decodeBitmap
-        val sizeOverride = solveSettings.boardSizeOverride
         solveJob?.cancel()
         boardLoadJob?.cancel()
         isSolving = false
@@ -67,7 +64,7 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         try {
                             withContext(Dispatchers.Default) {
-                                PadBoardRecognizer().recognize(bitmap, sizeOverride)
+                                PadBoardRecognizer().recognize(bitmap)
                             }
                         } finally {
                             bitmap.recycle()
@@ -126,17 +123,12 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateSolveSettings(settings: SolveSettings) {
-        val sizeChanged = solveSettings.boardSizeOverride != settings.boardSizeOverride
         solveSettings = settings
         settingsStore.save(settings)
-        if (sizeChanged) imageDecoder?.let(::loadImage)
     }
 
     fun refreshSettings() {
-        val settings = settingsStore.load()
-        val sizeChanged = solveSettings.boardSizeOverride != settings.boardSizeOverride
-        solveSettings = settings
-        if (sizeChanged) imageDecoder?.let(::loadImage)
+        solveSettings = settingsStore.load()
     }
 
     fun cancelSolve() {
@@ -145,7 +137,6 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
         isSolving = false
     }
     fun reset() {
-        imageDecoder = null
         boardLoadJob?.cancel()
         boardLoadJob = null
         cancelSolve()

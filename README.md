@@ -15,7 +15,7 @@ Install SDK Platform 37 and Android SDK Build Tools 36.0.0 from Android Studio's
 
 1. Tap **Capture board** and approve the screen-capture and notification prompts.
 2. Switch to Puzzles & Dragons, open the notification shade, and tap **Capture board** in the ongoing capture notification.
-3. Review the detected board, then solve it. Board size is detected automatically; choose a size in Solve settings to override detection and reread the screenshot.
+3. Review the detected board, then solve it. Board size is detected automatically.
 4. Tap **Show route in PAD**. If asked, grant draw-over-apps access, then tap **Show route in PAD** again to display the numbered, touch-through route overlay. No game input is automated.
 
 Each screen-capture session requires system approval. Notifications are needed for the capture action on Android 13 and later. Captured images are kept in the app's private storage and are excluded from Android backup. They are not sent over the network.

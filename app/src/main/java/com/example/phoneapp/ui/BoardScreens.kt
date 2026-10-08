@@ -132,7 +132,7 @@ internal fun HomeScreen(
         TextButton(onClick = { privacyVisible.value = true }) { Text("Privacy policy") }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Find your next route.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-            Text("Solve a 5×4, 6×5, or 7×6 board and follow the route in PAD.",
+            Text("Solve a board and follow the route in PAD.",
                 style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
@@ -190,9 +190,8 @@ fun BoardPreviewScreen(
         ) {
             Text("Board not clear enough", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
-            Text("Capture a clear board, or choose its size in Solve settings and retry.")
+            Text("Capture a clear board and try again.")
             Spacer(Modifier.height(20.dp))
-            OutlinedButton(onClick = onOpenSettings) { Text("Solve settings") }
             Button(onClick = onNewBoard) { Text("New board") }
         }
 
@@ -265,21 +264,11 @@ fun SolveSettingsDrawer(
                     Spacer(Modifier.height(20.dp))
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                            ChoiceDropdown(
-                                selectedValue = settings.boardSizeOverride,
-                                choices = listOf(null to "Automatic") + BoardSize.entries.map { it to it.displayName },
-                                label = "Board size",
-                                enabled = !isSolving,
-                                onSelected = { onSettingsChanged(settings.copy(boardSizeOverride = it)) },
-                            )
-                            Text("Use Automatic unless the detected layout is incorrect. Changing the size rereads your screenshot.",
-                                style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(16.dp))
                             Text("Combo target", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             ComboTargetDropdown(
                                 selectedTarget = settings.targetComboCount,
-                                maximumTarget = (board?.orbs?.size ?: settings.boardSizeOverride?.cellCount ?: BoardSize.LARGE.cellCount) / 3,
+                                maximumTarget = (board?.orbs?.size ?: BoardSize.LARGE.cellCount) / 3,
                                 enabled = !isSolving,
                                 onTargetSelected = { onSettingsChanged(settings.copy(targetComboCount = it)) },
                             )

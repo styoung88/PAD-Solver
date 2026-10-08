@@ -155,7 +155,7 @@ class BoardScreenRegressionTest {
             MaterialTheme { BoardPreviewScreen(BoardRecognition.Uncertain(0), false, SolveSettings(), {}, { resets++ }) }
         }
         compose.onNodeWithText("Board not clear enough").assertIsDisplayed()
-        compose.onNodeWithText("Solve settings").assertIsDisplayed()
+        compose.onNodeWithText("Solve settings").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
         compose.onNodeWithText("New board").performClick()
         compose.runOnIdle { assertEquals(1, resets) }
@@ -174,6 +174,7 @@ class BoardScreenRegressionTest {
             }
         }
         compose.onNodeWithText("Open drawer").performClick()
+        compose.onNodeWithText("Board size").assertDoesNotExist()
         compose.onNodeWithText("Path style").assertDoesNotExist()
         compose.onNodeWithText("Route appearance").assertDoesNotExist()
         compose.onNodeWithText("Close").performScrollTo().assertIsDisplayed()

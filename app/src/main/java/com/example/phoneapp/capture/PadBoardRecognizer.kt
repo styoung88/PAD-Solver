@@ -25,21 +25,21 @@ sealed interface BoardRecognition {
 
 /** Recognizes the centered PAD grid using orb colors and spacing evidence. */
 class PadBoardRecognizer {
-    fun recognize(bitmap: Bitmap, sizeOverride: BoardSize? = null): BoardRecognition {
+    fun recognize(bitmap: Bitmap): BoardRecognition {
         // PAD captures include the portrait battle screen above the grid. Square
         // board fragments can otherwise mistake enemy artwork for missing rows.
         if (bitmap.width < 200 || bitmap.height < 300 || bitmap.height < bitmap.width * 1.2f) {
             return BoardRecognition.Uncertain(0)
         }
         val colorMap = ClassifiedImage.from(bitmap, ::classify)
-        val candidates = (sizeOverride?.let(::listOf) ?: BoardSize.entries)
+        val candidates = BoardSize.entries
             .mapNotNull { findCandidate(bitmap, colorMap, it) }
             .sortedByDescending { it.score }
         val usable = candidates.filter { it.complete &&
             it.averageColorSupport >= MIN_AVERAGE_COLOR_SUPPORT && it.gridSupport >= MIN_GRID_GAP_SUPPORT &&
             it.top >= 0f && it.top + it.height <= bitmap.height }
         val candidate = usable.firstOrNull() ?: return BoardRecognition.Uncertain(candidates.firstOrNull()?.recognized ?: 0)
-        if (sizeOverride == null && usable.getOrNull(1)?.let {
+        if (usable.getOrNull(1)?.let {
                 candidate.score - it.score < MIN_SIZE_SCORE_MARGIN
             } == true
         ) return BoardRecognition.Uncertain(candidate.recognized)

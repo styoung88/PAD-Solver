@@ -139,12 +139,12 @@ class SolutionOverlayService : Service() {
                 val recognized = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     val bitmap = BoardImageLoader.read(this@SolutionOverlayService, uri) ?: return@withContext null
                     try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                        PadBoardRecognizer().recognize(bitmap, settings.boardSizeOverride) as? BoardRecognition.Recognized
+                        PadBoardRecognizer().recognize(bitmap) as? BoardRecognition.Recognized
                     } }
                     finally { bitmap.recycle() }
                 }
                 if (recognized == null) {
-                    toolbarView?.setStatus("Board not recognized. Check board size in settings.", isError = true)
+                    toolbarView?.setStatus("Board not recognized. Try another capture.", isError = true)
                     return@launch
                 }
                 toolbarView?.setStatus("Finding your route…", busy = true)

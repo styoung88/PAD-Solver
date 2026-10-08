@@ -32,29 +32,27 @@ class PadBoardRecognizerSizeTest {
         for ((file, rows, enhanced) in fixtures) {
             val bitmap = checkNotNull(context.assets.open(file).use(BitmapFactory::decodeStream))
             try {
-                for (override in listOf(null, BoardSize.LARGE)) {
-                    val result = PadBoardRecognizer().recognize(bitmap, override)
-                    assertTrue("$file override=$override: $result", result is BoardRecognition.Recognized)
-                    val recognized = result as BoardRecognition.Recognized
-                    assertEquals(7, recognized.board.columns)
-                    assertEquals(6, recognized.board.rows)
-                    assertEquals("$file override=$override bounds=${recognized.boardBounds}", rows.joinToString("").map { when (it) {
-                        'F' -> OrbColor.FIRE
-                        'D' -> OrbColor.DARK
-                        else -> OrbColor.HEART
-                    } }, recognized.board.orbs.map { it.color })
-                    assertEquals("$file enhanced orbs", enhanced,
-                        recognized.board.orbs.withIndex().filter {
-                            OrbModifier.ENHANCED in it.value.modifiers
-                        }.map { it.index }.toSet())
-                    // Centers measured in these 574×1280 screenshots.
-                    for (row in 0 until 6) for (column in 0 until 7) {
-                        val bounds = recognized.boardBounds
-                        assertEquals("$file column=$column bounds=$bounds", 52f + column * 78.3f,
-                            bounds.left + (column + 0.5f) * bounds.width() / 7f, 4f)
-                        assertEquals("$file row=$row", 816f + row * 78f,
-                            bounds.top + (row + 0.5f) * bounds.height() / 6f, 4f)
-                    }
+                val result = PadBoardRecognizer().recognize(bitmap)
+                assertTrue("$file: $result", result is BoardRecognition.Recognized)
+                val recognized = result as BoardRecognition.Recognized
+                assertEquals(7, recognized.board.columns)
+                assertEquals(6, recognized.board.rows)
+                assertEquals("$file bounds=${recognized.boardBounds}", rows.joinToString("").map { when (it) {
+                    'F' -> OrbColor.FIRE
+                    'D' -> OrbColor.DARK
+                    else -> OrbColor.HEART
+                } }, recognized.board.orbs.map { it.color })
+                assertEquals("$file enhanced orbs", enhanced,
+                    recognized.board.orbs.withIndex().filter {
+                        OrbModifier.ENHANCED in it.value.modifiers
+                    }.map { it.index }.toSet())
+                // Centers measured in these 574×1280 screenshots.
+                for (row in 0 until 6) for (column in 0 until 7) {
+                    val bounds = recognized.boardBounds
+                    assertEquals("$file column=$column bounds=$bounds", 52f + column * 78.3f,
+                        bounds.left + (column + 0.5f) * bounds.width() / 7f, 4f)
+                    assertEquals("$file row=$row", 816f + row * 78f,
+                        bounds.top + (row + 0.5f) * bounds.height() / 6f, 4f)
                 }
             } finally { bitmap.recycle() }
         }
@@ -115,16 +113,7 @@ class PadBoardRecognizerSizeTest {
     }
 
     @Test
-    fun manualSizeOverrideUsesThatGridAndBlankImagesRemainUncertain() {
-        for (size in BoardSize.entries) {
-            val bitmap = grid(size, 6, 1f)
-            try {
-                val result = PadBoardRecognizer().recognize(bitmap, size)
-                assertTrue(result is BoardRecognition.Recognized)
-                assertEquals(size.columns, (result as BoardRecognition.Recognized).board.columns)
-                assertEquals(size.rows, result.board.rows)
-            } finally { bitmap.recycle() }
-        }
+    fun blankImagesRemainUncertain() {
         val blank = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
         try {
             blank.eraseColor(Color.BLACK)

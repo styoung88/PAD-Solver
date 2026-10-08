@@ -1,14 +1,12 @@
 package com.example.phoneapp.solver
 
 import com.example.phoneapp.board.OrbColor
-import com.example.phoneapp.board.BoardSize
 
 /** User-selected objectives shared by the app and the automatic overlay solver. */
 data class SolveSettings(
     val preferredColor: OrbColor? = null,
     val targetComboCount: Int? = null,
     val matchPatternFocus: MatchPattern? = null,
-    val boardSizeOverride: BoardSize? = null,
 ) {
     init {
         require(preferredColor == null || preferredColor.isAttacking)
