@@ -103,7 +103,16 @@ object ColorDamageEstimate {
         require(color.isAttacking)
         val comboFactorInQuarters = analysis.comboCount.toLong() + 3
         return analysis.allMatches.asSequence().filter { it.color == color }.sumOf { match ->
-            comboFactorInQuarters * (match.size + 1) * (100 + 6L * match.enhancedOrbCount)
+            // Each + cancels one minus in this match. One remaining minus halves
+            // damage; two or more reduce it to zero, without removing the combo.
+            val netEnhanced = match.enhancedOrbCount - match.weakenedOrbCount
+            val weakenedFactor = when {
+                netEnhanced >= 0 -> 2
+                netEnhanced == -1 -> 1
+                else -> 0
+            }
+            comboFactorInQuarters * (match.size + 1) *
+                (100 + 6L * netEnhanced.coerceAtLeast(0)) * weakenedFactor / 2
         }
     }
 }

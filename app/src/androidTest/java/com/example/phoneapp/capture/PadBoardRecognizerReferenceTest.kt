@@ -47,6 +47,10 @@ class PadBoardRecognizerReferenceTest {
         OrbColor.LIGHT -> 'L'
         OrbColor.DARK -> 'D'
         OrbColor.HEART -> 'H'
+        OrbColor.JAMMER -> 'J'
+        OrbColor.POISON -> 'P'
+        OrbColor.LETHAL_POISON -> 'M'
+        OrbColor.BOMB -> 'X'
         OrbColor.UNKNOWN -> '?'
     }
 

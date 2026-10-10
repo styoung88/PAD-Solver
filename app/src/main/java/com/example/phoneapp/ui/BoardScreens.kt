@@ -436,6 +436,20 @@ fun SolutionScreen(
                         }
                     }
                     SolveSettingsSummary(solution.preferredColor, solution.targetComboCount, solution.matchPatternFocus)
+                    val hazardLabels = recognition.board.orbs.mapNotNull { orb -> when (orb.color) {
+                        OrbColor.JAMMER -> "J: Jammer"
+                        OrbColor.POISON -> "P: Poison"
+                        OrbColor.LETHAL_POISON -> "P!: Lethal poison"
+                        OrbColor.BOMB -> "B: Bomb"
+                        else -> null
+                    } }.distinct()
+                    if (hazardLabels.isNotEmpty()) {
+                        Text(hazardLabels.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (recognition.board.orbs.any { it.color in listOf(OrbColor.POISON, OrbColor.LETHAL_POISON, OrbColor.BOMB) }) {
+                        Text("Poison damage and bomb explosions are not included.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     if (unmetRequirements.isNotEmpty()) {
                         val message = if (solution.requirementsPossible) {
                             "Could not find a route that meets ${unmetRequirements.joinToString(" and ")}. Showing the best attempt."
@@ -664,20 +678,49 @@ fun OrbBoard(
             for (column in 0 until board.columns) {
                 val centerX = (column + 0.5f) * cellWidth
                 val centerY = (row + 0.5f) * cellHeight
-                val color = orbUiColor(board.orbs[row * board.columns + column].color)
+                val orb = board.orbs[row * board.columns + column]
+                val color = orbUiColor(orb.color)
                 paint.color = color.toArgb()
                 paint.style = android.graphics.Paint.Style.FILL
                 native.drawCircle(centerX, centerY, radius, paint)
 
-                if (OrbModifier.ENHANCED in board.orbs[row * board.columns + column].modifiers) {
+                val hazardLabel = when (orb.color) {
+                    OrbColor.JAMMER -> "J"
+                    OrbColor.POISON -> "P"
+                    OrbColor.LETHAL_POISON -> "P!"
+                    OrbColor.BOMB -> "B"
+                    else -> null
+                }
+                if (hazardLabel != null) {
+                    paint.color = android.graphics.Color.WHITE
+                    paint.textAlign = android.graphics.Paint.Align.CENTER
+                    paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+                    paint.textSize = radius * 0.85f
+                    native.drawText(hazardLabel, centerX, centerY + radius * 0.3f, paint)
+                }
+                if (OrbModifier.LOCKED in orb.modifiers) {
+                    paint.color = android.graphics.Color.rgb(255, 221, 74)
+                    paint.style = android.graphics.Paint.Style.STROKE
+                    paint.strokeWidth = radius * 0.07f
+                    val lockX = centerX - radius * 0.55f
+                    val lockY = centerY - radius * 0.55f
+                    native.drawArc(lockX - radius * 0.12f, lockY - radius * 0.24f,
+                        lockX + radius * 0.12f, lockY + radius * 0.03f, 180f, 180f, false, paint)
+                    paint.style = android.graphics.Paint.Style.FILL
+                    native.drawRoundRect(lockX - radius * 0.2f, lockY - radius * 0.03f,
+                        lockX + radius * 0.2f, lockY + radius * 0.24f, radius * 0.04f, radius * 0.04f, paint)
+                }
+                if (OrbModifier.ENHANCED in orb.modifiers || OrbModifier.WEAKENED in orb.modifiers) {
                     paint.style = android.graphics.Paint.Style.FILL
                     paint.color = android.graphics.Color.rgb(20, 31, 44)
                     native.drawCircle(centerX + radius * 0.55f, centerY + radius * 0.55f, radius * 0.29f, paint)
-                    paint.color = android.graphics.Color.rgb(255, 221, 74)
+                    paint.color = if (OrbModifier.WEAKENED in orb.modifiers) android.graphics.Color.rgb(100, 180, 255)
+                        else android.graphics.Color.rgb(255, 221, 74)
                     paint.textAlign = android.graphics.Paint.Align.CENTER
                     paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
                     paint.textSize = radius * 0.58f
-                    native.drawText("+", centerX + radius * 0.55f, centerY + radius * 0.75f, paint)
+                    native.drawText(if (OrbModifier.WEAKENED in orb.modifiers) "−" else "+",
+                        centerX + radius * 0.55f, centerY + radius * 0.75f, paint)
                 }
             }
         }
@@ -702,6 +745,10 @@ private fun orbUiColor(color: OrbColor): Color = when (color) {
     OrbColor.LIGHT -> Color(0xFFF3D447)
     OrbColor.DARK -> Color(0xFF9B6BCC)
     OrbColor.HEART -> Color(0xFFE78EB5)
+    OrbColor.JAMMER -> Color(0xFF355A79)
+    OrbColor.POISON -> Color(0xFF754290)
+    OrbColor.LETHAL_POISON -> Color(0xFF382044)
+    OrbColor.BOMB -> Color(0xFF263C3A)
     OrbColor.UNKNOWN -> Color(0xFF777777)
 }
 
@@ -712,5 +759,9 @@ private fun orbColorName(color: OrbColor): String = when (color) {
     OrbColor.LIGHT -> "Light"
     OrbColor.DARK -> "Dark"
     OrbColor.HEART -> "Heart"
+    OrbColor.JAMMER -> "Jammer"
+    OrbColor.POISON -> "Poison"
+    OrbColor.LETHAL_POISON -> "Lethal poison"
+    OrbColor.BOMB -> "Bomb"
     OrbColor.UNKNOWN -> "Unknown"
 }

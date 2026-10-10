@@ -39,6 +39,12 @@ class PadBoardRecognizer {
             it.averageColorSupport >= MIN_AVERAGE_COLOR_SUPPORT && it.gridSupport >= MIN_GRID_GAP_SUPPORT &&
             it.top >= 0f && it.top + it.height <= bitmap.height }
         val candidate = usable.firstOrNull() ?: return BoardRecognition.Uncertain(candidates.firstOrNull()?.recognized ?: 0)
+        // Do not replace a stronger, partially obscured grid with a weaker
+        // region just because all of that region's colors happened to classify.
+        if (candidates.any { !it.complete && it.score > candidate.score &&
+                it.averageColorSupport >= MIN_AVERAGE_COLOR_SUPPORT && it.gridSupport >= MIN_GRID_GAP_SUPPORT
+            }
+        ) return BoardRecognition.Uncertain(candidates.first().recognized)
         if (usable.getOrNull(1)?.let {
                 candidate.score - it.score < MIN_SIZE_SCORE_MARGIN
             } == true
@@ -49,14 +55,23 @@ class PadBoardRecognizer {
             board = Board(
                 columns = size.columns,
                 rows = size.rows,
-                orbs = candidate.colors.mapIndexed { index, color ->
+                orbs = candidate.colors.mapIndexed { index, sampledColor ->
                     val row = index / size.columns
                     val column = index % size.columns
                     val centerX = candidate.left + (column + 0.5f) * candidate.width / size.columns
                     val centerY = candidate.top + (row + 0.5f) * candidate.height / size.rows
-                    val modifiers = if (hasEnhancedMarker(bitmap, centerX, centerY, candidate.width / size.columns)) {
-                        setOf(OrbModifier.ENHANCED)
-                    } else emptySet()
+                    val cellSize = candidate.width / size.columns
+                    // Refine symbols only after fitting the grid so alignment tolerance
+                    // does not flatten the evidence used to locate its rows and columns.
+                    val color = sampleHazard(colorMap, centerX, centerY, cellSize, refine = true)?.color
+                        ?: sampledColor
+                    val modifiers = buildSet {
+                        if (hasLockedMarker(bitmap, centerX, centerY, cellSize)) add(OrbModifier.LOCKED)
+                        if (color.isAttacking || color == OrbColor.HEART) {
+                            if (hasEnhancedMarker(bitmap, centerX, centerY, cellSize, color)) add(OrbModifier.ENHANCED)
+                            else if (hasWeakenedMarker(bitmap, centerX, centerY, cellSize)) add(OrbModifier.WEAKENED)
+                        }
+                    }
                     Orb(color, modifiers)
                 },
             ),
@@ -81,14 +96,18 @@ class PadBoardRecognizer {
         val coarseYStep = (bitmap.height * CENTER_Y_STEP).coerceAtLeast(1f)
 
         fun candidateAt(centerY: Float, cellHeight: Float = cellSize,
-            left: Float = 0f, width: Float = boardWidth): Candidate {
+            left: Float = 0f, width: Float = boardWidth, recoverUnknown: Boolean = false): Candidate {
             val height = cellHeight * size.rows
             val top = centerY - height / 2f
             val cellWidth = width / size.columns
             val samples = ArrayList<OrbSample>(size.cellCount)
             for (row in 0 until size.rows) for (column in 0 until size.columns) {
-                samples += sampleOrbColor(colorMap, left + (column + 0.5f) * cellWidth,
-                    top + (row + 0.5f) * cellHeight, cellWidth)
+                val x = left + (column + 0.5f) * cellWidth
+                val y = top + (row + 0.5f) * cellHeight
+                val sample = sampleOrbColor(colorMap, x, y, cellWidth)
+                samples += if (recoverUnknown && sample.color == OrbColor.UNKNOWN) {
+                    recoverOrbColor(colorMap, x, y, cellWidth) ?: sample
+                } else sample
             }
             val colors = samples.map(OrbSample::color)
             val recognized = colors.count { it != OrbColor.UNKNOWN }
@@ -130,8 +149,7 @@ class PadBoardRecognizer {
         val fittedRows = fitRowGaps(bitmap, colorCandidate)
         val candidate = fittedRows?.let { (top, pitch) ->
             candidateAt(top + pitch * size.rows / 2f, pitch, colorCandidate.left, colorCandidate.width).takeIf {
-                it.recognized == size.cellCount &&
-                    it.averageColorSupport >= MIN_AVERAGE_COLOR_SUPPORT &&
+                it.averageColorSupport >= MIN_AVERAGE_COLOR_SUPPORT &&
                     it.averageColorSupport >= colorCandidate.averageColorSupport - 0.10f
             }
         } ?: colorCandidate
@@ -147,9 +165,26 @@ class PadBoardRecognizer {
         } else null
         val refined = refinedColumns?.let { (left, pitch) ->
             candidateAt(candidate.top + candidate.height / 2f, candidate.height / size.rows,
-                left, pitch * size.columns).takeIf { it.complete }
+                left, pitch * size.columns).takeIf {
+                    it.averageColorSupport >= candidate.averageColorSupport - 0.10f
+                }
         } ?: candidate
-        return refined
+        return candidateAt(refined.top + refined.height / 2f, refined.height / size.rows,
+            refined.left, refined.width, recoverUnknown = true)
+    }
+
+    /** Retry only unresolved cells after geometry has been established. */
+    private fun recoverOrbColor(image: ClassifiedImage, x: Float, y: Float, pitch: Float): OrbSample? {
+        sampleHazard(image, x, y, pitch, refine = true)?.let { return it }
+        val samples = ArrayList<OrbSample>()
+        for (dx in SYMBOL_OFFSETS) for (dy in SYMBOL_OFFSETS) {
+            val sample = sampleOrbColor(image, x + dx * pitch, y + dy * pitch, pitch)
+            if (sample.color != OrbColor.UNKNOWN && sample.colorSupport >= 0.35f) samples += sample
+        }
+        val groups = samples.groupBy { it.color }.values.sortedByDescending { it.size }
+        val best = groups.firstOrNull() ?: return null
+        if (best.size < 5 || best.size < 2 * (groups.getOrNull(1)?.size ?: 0)) return null
+        return OrbSample(best.first().color, best.map { it.colorSupport }.average().toFloat())
     }
 
     private fun brightness(bitmap: Bitmap, x: Float, y: Float): Float {
@@ -296,6 +331,9 @@ class PadBoardRecognizer {
         val mappedCenterX = centerX / scale
         val mappedCenterY = centerY / scale
         val mappedCellSize = cellSize / scale
+        // Hazard symbols share hues with ordinary orbs. Compare their center art
+        // against both hazard and ordinary symbols before using the color ring.
+        sampleHazard(image, centerX, centerY, cellSize)?.let { return it }
         val patchRadius = mappedCellSize * SAMPLE_PATCH_RADIUS_FRACTION
         val patchVotes = IntArray(OrbColor.entries.size)
         val step = (mappedCellSize * SAMPLE_STEP_FRACTION).toInt().coerceAtLeast(1)
@@ -368,8 +406,84 @@ class PadBoardRecognizer {
         }
     }
 
+    /** Blue horizontal badge with a bright rim, rather than ordinary blue orb art. */
+    internal fun hasWeakenedMarker(bitmap: Bitmap, centerX: Float, centerY: Float, cellSize: Float): Boolean {
+        val hsv = FloatArray(3)
+        fun blue(x: Float, y: Float) = markerPatch(bitmap, x, y, cellSize, hsv) { hsv ->
+            hsv[0] in 175f..235f && hsv[1] in 0.08f..0.75f && hsv[2] >= 0.65f
+        }
+        fun rim(x: Float, y: Float) = markerPatch(bitmap, x, y, cellSize, hsv, 0.25f) { hsv ->
+            hsv[1] < 0.35f && hsv[2] >= 0.72f
+        }
+        var dy = 0.14f
+        // The badge overlays the body, above the orb's blue/white bottom rim.
+        while (dy <= 0.32f) {
+            var dx = 0.14f
+            while (dx <= 0.44f) {
+                val x = centerX + dx * cellSize
+                val y = centerY + dy * cellSize
+                if (blue(x, y)) for (halfWidth in MINUS_HALF_WIDTHS) for (halfHeight in MINUS_HALF_HEIGHTS) {
+                    if (blue(x - halfWidth * cellSize, y) && blue(x + halfWidth * cellSize, y) &&
+                        rim(x, y - cellSize * halfHeight) && rim(x, y + cellSize * halfHeight) &&
+                        rim(x - cellSize * (halfWidth + 0.055f), y) &&
+                        rim(x + cellSize * (halfWidth + 0.055f), y) &&
+                        !blue(x, y - cellSize * 0.08f) && !blue(x, y + cellSize * 0.08f)
+                    ) return true
+                }
+                dx += 0.01f
+            }
+            dy += 0.01f
+        }
+        return false
+    }
+
+    /** Gold padlock at the upper-left: body, shackle, and dark keyhole. */
+    internal fun hasLockedMarker(bitmap: Bitmap, centerX: Float, centerY: Float, cellSize: Float): Boolean {
+        val hsv = FloatArray(3)
+        fun gold(x: Float, y: Float) = markerPatch(bitmap, x, y, cellSize, hsv) { hsv ->
+            hsv[0] in 35f..70f && hsv[1] >= 0.20f && hsv[2] >= 0.60f
+        }
+        var dy = -0.30f
+        while (dy <= -0.08f) {
+            var dx = -0.44f
+            while (dx <= -0.18f) {
+                val x = centerX + dx * cellSize
+                val y = centerY + dy * cellSize
+                for (scale in LOCK_SCALES) {
+                    fun at(ox: Float, oy: Float) = gold(x + ox * cellSize * scale, y + oy * cellSize * scale)
+                    if (at(-0.075f, 0f) && at(0.075f, 0f) && at(0f, 0.07f) &&
+                        at(-0.06f, -0.14f) && at(0.06f, -0.14f) && at(0f, -0.20f) &&
+                        !at(0f, 0f) && !at(0f, -0.13f) &&
+                        !at(-0.15f, -0.14f) && !at(0.15f, -0.14f)
+                    ) return true
+                }
+                dx += 0.02f
+            }
+            dy += 0.02f
+        }
+        return false
+    }
+
+    private inline fun markerPatch(
+        bitmap: Bitmap, x: Float, y: Float, cellSize: Float, hsv: FloatArray, minimumSupport: Float = 0.45f,
+        accepts: (FloatArray) -> Boolean,
+    ): Boolean {
+        val radius = (cellSize * 0.009f).roundToInt().coerceAtLeast(1)
+        var accepted = 0
+        var samples = 0
+        for (py in y.roundToInt() - radius..y.roundToInt() + radius) {
+            for (px in x.roundToInt() - radius..x.roundToInt() + radius) {
+                if (px !in 0 until bitmap.width || py !in 0 until bitmap.height) continue
+                Color.colorToHSV(bitmap.getPixel(px, py), hsv)
+                if (accepts(hsv)) accepted++
+                samples++
+            }
+        }
+        return samples > 0 && accepted.toFloat() / samples >= minimumSupport
+    }
+
     /** Detects the small gold + glyph near the lower-right of an enhanced orb. */
-    private fun hasEnhancedMarker(bitmap: Bitmap, centerX: Float, centerY: Float, cellSize: Float): Boolean {
+    private fun hasEnhancedMarker(bitmap: Bitmap, centerX: Float, centerY: Float, cellSize: Float, color: OrbColor): Boolean {
         val sampleRadius = (cellSize * ENHANCED_MARKER_SAMPLE_RADIUS).toInt().coerceAtLeast(1)
         val patchStep = sampleRadius
         val hsv = FloatArray(3)
@@ -386,7 +500,7 @@ class PadBoardRecognizer {
                 for (armSpacing in ENHANCED_MARKER_ARM_SPACINGS) {
                     var goldPatches = 0
                     for ((offsetX, offsetY) in ENHANCED_MARKER_PLUS_POINTS) {
-                        if (hasGoldPatch(
+                        if (hasEnhancedMarkerPatch(
                                 bitmap,
                                 markerCenterX + offsetX * cellSize * armSpacing,
                                 markerCenterY + offsetY * cellSize * armSpacing,
@@ -399,7 +513,7 @@ class PadBoardRecognizer {
 
                     var goldControlPatches = 0
                     for ((offsetX, offsetY) in ENHANCED_MARKER_DIAGONAL_POINTS) {
-                        if (hasGoldPatch(
+                        if (hasEnhancedMarkerPatch(
                                 bitmap,
                                 markerCenterX + offsetX * cellSize * armSpacing,
                                 markerCenterY + offsetY * cellSize * armSpacing,
@@ -409,9 +523,20 @@ class PadBoardRecognizer {
                             )
                         ) goldControlPatches++
                     }
-                    if (goldPatches >= MIN_ENHANCED_PLUS_PATCHES &&
+                    // Light's gold star can resemble a partially sampled plus.
+                    val requiredPatches = if (color == OrbColor.LIGHT) 5 else MIN_ENHANCED_PLUS_PATCHES
+                    if (goldPatches >= requiredPatches &&
                         goldControlPatches <= MAX_ENHANCED_CONTROL_PATCHES
-                    ) return true
+                    ) {
+                        // A light orb's star also has gold arms over dark corners.
+                        // The badge's pale outline distinguishes the two symbols.
+                        if (color != OrbColor.LIGHT || ENHANCED_MARKER_DIAGONAL_POINTS.count { (dx, dy) ->
+                                hasEnhancedMarkerPatch(bitmap, markerCenterX + dx * cellSize * armSpacing,
+                                    markerCenterY + dy * cellSize * armSpacing, sampleRadius, patchStep, hsv,
+                                    paleOutline = true)
+                            } >= 2
+                        ) return true
+                    }
                 }
                 markerOffsetX += ENHANCED_MARKER_OFFSET_STEP
             }
@@ -420,13 +545,14 @@ class PadBoardRecognizer {
         return false
     }
 
-    private fun hasGoldPatch(
+    private fun hasEnhancedMarkerPatch(
         bitmap: Bitmap,
         centerX: Float,
         centerY: Float,
         radius: Int,
         step: Int,
         hsv: FloatArray,
+        paleOutline: Boolean = false,
     ): Boolean {
         var goldPixels = 0
         var sampledPixels = 0
@@ -439,9 +565,10 @@ class PadBoardRecognizer {
             var x = left
             while (x <= right) {
                 Color.colorToHSV(bitmap.getPixel(x, y), hsv)
-                if (hsv[0] in ENHANCED_GOLD_HUE_RANGE &&
+                val matches = if (paleOutline) hsv[1] < 0.30f && hsv[2] >= ENHANCED_GOLD_MIN_BRIGHTNESS
+                else hsv[0] in ENHANCED_GOLD_HUE_RANGE &&
                     hsv[1] >= ENHANCED_GOLD_MIN_SATURATION && hsv[2] >= ENHANCED_GOLD_MIN_BRIGHTNESS
-                ) goldPixels++
+                if (matches) goldPixels++
                 sampledPixels++
                 x += step
             }
@@ -463,7 +590,45 @@ class PadBoardRecognizer {
         val gridSupport: Float = 0f,
     ) {
         val complete: Boolean get() = recognized == size.cellCount
-        fun betterThan(other: Candidate): Boolean = if (complete != other.complete) complete else score > other.score
+        fun betterThan(other: Candidate): Boolean = score > other.score
+    }
+
+    private fun sampleHazard(
+        image: ClassifiedImage,
+        centerX: Float,
+        centerY: Float,
+        cellSize: Float,
+        refine: Boolean = false,
+    ): OrbSample? {
+        val mapScale = image.sourcePixelsPerMapPixel
+        val pitch = cellSize / mapScale
+        val x = centerX / mapScale - 0.5f
+        val y = centerY / mapScale - 0.5f
+        val values = FloatArray(OrbSymbolTemplates.SIDE * OrbSymbolTemplates.SIDE)
+        fun descriptor(scale: Float, dx: Float, dy: Float): FloatArray {
+            for (row in 0 until OrbSymbolTemplates.SIDE) for (column in 0 until OrbSymbolTemplates.SIDE) {
+                values[row * OrbSymbolTemplates.SIDE + column] = image.luminanceAt(
+                    x + (dx + (column - OrbSymbolTemplates.SIDE / 2) * OrbSymbolTemplates.SAMPLE_PITCH * scale) * pitch,
+                    y + (dy + (row - OrbSymbolTemplates.SIDE / 2) * OrbSymbolTemplates.SAMPLE_PITCH * scale) * pitch,
+                )
+            }
+            return values
+        }
+        OrbSymbolTemplates.classify(descriptor(1f, 0f, 0f))?.let { (color, support) ->
+            return OrbSample(color, support)
+        }
+        if (!refine) return null
+        // Orb art can sit off center and vary slightly in size even within one
+        // screenshot. Keep the confidence and ordinary-symbol comparison while
+        // searching a small neighborhood; thin route strokes can still leave
+        // enough of the skull visible to match without removing overlay pixels.
+        val scores = FloatArray(OrbColor.entries.size)
+        for (scale in SYMBOL_SCALES) for (dx in SYMBOL_OFFSETS) for (dy in SYMBOL_OFFSETS) {
+            OrbSymbolTemplates.accumulateScores(descriptor(scale, dx, dy), scores)
+        }
+        return OrbSymbolTemplates.selectHazard(scores, jammerThreshold = 0.65f)?.let { (color, support) ->
+            OrbSample(color, support)
+        }
     }
 
     private data class OrbSample(val color: OrbColor, val colorSupport: Float)
@@ -473,14 +638,28 @@ class PadBoardRecognizer {
         val height: Int,
         val sourcePixelsPerMapPixel: Int,
         private val colors: ByteArray,
+        private val luminance: FloatArray,
     ) {
         fun colorAt(x: Int, y: Int): Int = colors[y * width + x].toInt()
+        fun luminanceAt(x: Float, y: Float): Float {
+            val px = x.coerceIn(0f, width - 1f)
+            val py = y.coerceIn(0f, height - 1f)
+            val left = px.toInt()
+            val top = py.toInt()
+            val right = minOf(left + 1, width - 1)
+            val bottom = minOf(top + 1, height - 1)
+            val dx = px - left
+            val dy = py - top
+            return (luminance[top * width + left] * (1 - dx) + luminance[top * width + right] * dx) * (1 - dy) +
+                (luminance[bottom * width + left] * (1 - dx) + luminance[bottom * width + right] * dx) * dy
+        }
 
         companion object {
             fun from(bitmap: Bitmap, classifyColor: (FloatArray) -> OrbColor?): ClassifiedImage {
                 val width = (bitmap.width + MAP_SCALE - 1) / MAP_SCALE
                 val height = (bitmap.height + MAP_SCALE - 1) / MAP_SCALE
                 val colors = ByteArray(width * height) { NO_COLOR.toByte() }
+                val luminance = FloatArray(width * height)
                 val hsv = FloatArray(3)
                 val rowsPerBatch = SOURCE_ROWS_PER_BATCH
                 val sourceRows = IntArray(bitmap.width * rowsPerBatch)
@@ -508,6 +687,8 @@ class PadBoardRecognizer {
                                 }
                             }
                             val averagedPixel = Color.rgb(red / count, green / count, blue / count)
+                            luminance[outputY * width + outputX] =
+                                (0.2126f * red + 0.7152f * green + 0.0722f * blue) / count
                             Color.colorToHSV(averagedPixel, hsv)
                             colors[outputY * width + outputX] =
                                 (classifyColor(hsv)?.ordinal ?: NO_COLOR).toByte()
@@ -516,7 +697,7 @@ class PadBoardRecognizer {
                     }
                     sourceTop += batchHeight
                 }
-                return ClassifiedImage(width, height, MAP_SCALE, colors)
+                return ClassifiedImage(width, height, MAP_SCALE, colors, luminance)
             }
         }
     }
@@ -561,13 +742,18 @@ class PadBoardRecognizer {
         const val MIN_FRAME_INSET_FRACTION = 0.015f
         const val MIN_SIZE_SCORE_MARGIN = 1f
         const val MAP_SCALE = 2
+        val SYMBOL_SCALES = floatArrayOf(0.9f, 1f, 1.1f)
+        val SYMBOL_OFFSETS = floatArrayOf(-0.08f, -0.04f, 0f, 0.04f, 0.08f)
         const val SOURCE_ROWS_PER_BATCH = 16
         const val NO_COLOR = -1
         const val ENHANCED_MARKER_MIN_X_OFFSET = 0.12f
+        val MINUS_HALF_WIDTHS = floatArrayOf(0.05f, 0.065f, 0.08f)
+        val MINUS_HALF_HEIGHTS = floatArrayOf(0.035f, 0.045f, 0.055f, 0.065f)
+        val LOCK_SCALES = floatArrayOf(0.85f, 1f, 1.15f)
         const val ENHANCED_MARKER_MAX_X_OFFSET = 0.38f
         const val ENHANCED_MARKER_MIN_Y_OFFSET = 0.08f
         const val ENHANCED_MARKER_MAX_Y_OFFSET = 0.52f
-        const val ENHANCED_MARKER_OFFSET_STEP = 0.04f
+        const val ENHANCED_MARKER_OFFSET_STEP = 0.02f
         const val ENHANCED_MARKER_SAMPLE_RADIUS = 0.014f
         const val ENHANCED_GOLD_MIN_SATURATION = 0.65f
         const val ENHANCED_GOLD_MIN_BRIGHTNESS = 0.82f
