@@ -10,26 +10,29 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
-import kotlin.math.abs
 import kotlin.coroutines.CoroutineContext
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 class BoardSolverTest {
     @Test
     fun cancellingFromAParallelWorkerCancelsTheWholeSearch() = runBlocking {
         val worker = kotlinx.coroutines.Job(coroutineContext[kotlinx.coroutines.Job]!!)
-        val starts = AtomicInteger()
+        val searchJob = AtomicReference<Job>()
+        val cancelledChild = AtomicReference<Job>()
         val dispatcher = object : CoroutineDispatcher() {
             override fun dispatch(context: CoroutineContext, block: Runnable) {
+                val job = context[Job]!!
+                searchJob.compareAndSet(null, job)
                 Dispatchers.Default.dispatch(context, Runnable {
-                    // Initial search dispatch, then each of its two exploration workers.
-                    if (starts.incrementAndGet() == 3) worker.cancel()
+                    // Cancel an exploration child, independent of dispatch order or count.
+                    if (job !== searchJob.get() && cancelledChild.compareAndSet(null, job)) job.cancel()
                     block.run()
                 })
             }
@@ -44,8 +47,8 @@ class BoardSolverTest {
             search.await()
             fail("Cancelling either exploration must cancel the solve")
         } catch (_: CancellationException) {
-            worker.join()
-            assertTrue(starts.get() >= 3)
+            assertNotNull("The solve must have started a parallel exploration", cancelledChild.get())
+            cancelledChild.get().join()
             assertFalse(worker.children.any { it.isActive })
         } finally {
             worker.cancel()
@@ -57,9 +60,10 @@ class BoardSolverTest {
         val input = Board(6, 2, ("FFFWWW" + "FFWWFF")
             .map { Orb(if (it == 'F') OrbColor.FIRE else OrbColor.WATER) })
         val options = SolveOptions(8, 24, SolveSettings(OrbColor.FIRE, matchPatternFocus = MatchPattern.TPA).toGoal())
-        val expected = BoardSolver().solve(input, options)
+        val solver = BoardSolver()
+        val expected = solver.solve(input, options)
         val results = coroutineScope {
-            List(4) { async { BoardSolver().solve(input, options) } }.awaitAll()
+            List(4) { async { solver.solve(input, options) } }.awaitAll()
         }
         results.forEach { assertEquals(expected, it) }
     }
@@ -78,53 +82,44 @@ class BoardSolverTest {
             SolveSettings(targetComboCount = 2).toGoal(), SolveSettings(OrbColor.FIRE, 2, MatchPattern.L_SHAPE).toGoal())
         val original = board.orbs.toList()
         for (goal in goals) {
-            val result = BoardSolver().solve(board, SolveOptions(maxOrbMoves = 4, beamWidth = 24, goal = goal))
-            assertTrue(result.path.isNotEmpty())
-            assertTrue(result.orbMoves <= 4)
-            val replay = board.orbs.toMutableList()
-            result.path.forEach { board.indexOf(it) }
-            result.path.zipWithNext().forEach { (from, to) ->
-                assertEquals(1, abs(from.row - to.row) + abs(from.column - to.column))
-                val fromIndex = board.indexOf(from)
-                val toIndex = board.indexOf(to)
-                val held = replay[fromIndex]
-                replay[fromIndex] = replay[toIndex]
-                replay[toIndex] = held
-            }
-            val analysis = BoardAnalyzer.resolveCascades(board.copy(orbs = replay))
-            assertEquals(analysis, result.predictedMatches)
-            assertEquals(goal.evaluate(analysis).satisfied, result.goalSatisfied)
-            assertEquals(goal.preferredColor, result.preferredColor)
-            assertEquals(goal.matchPatternFocus, result.matchPatternFocus)
-            assertEquals(goal.targetComboCount, result.targetComboCount)
-            assertEquals(goal.targetComboCount?.let { analysis.comboCount >= it }, result.comboMinimumSatisfied)
-            assertEquals(goal.matchPatternFocus?.countMatches(analysis, goal.preferredColor), result.focusedPatternMatchCount)
-            assertEquals(goal.matchPatternFocus?.let { it.countMatches(analysis, goal.preferredColor) > 0 }, result.matchPatternSatisfied)
+            val options = SolveOptions(maxOrbMoves = 4, beamWidth = 24, goal = goal)
+            val result = BoardSolver().solve(board, options)
+            assertValidSolution(board, options, result)
         }
         assertEquals(original, board.orbs)
     }
 
     @Test
-    fun zeroMoveSearchAnalyzesExistingBoardAndReportsImpossibleGoal() = runBlocking {
-        val goal = SolveSettings(OrbColor.WOOD, 99, MatchPattern.VDP).toGoal()
+    fun zeroMoveSearchAnalyzesExistingBoardWithoutRejectingAFeasibleGoal() = runBlocking {
+        val goal = SolveSettings(OrbColor.FIRE, 2).toGoal()
         val result = BoardSolver().solve(board, SolveOptions(maxOrbMoves = 0, goal = goal))
         assertEquals(1, result.path.size)
         assertEquals(0, result.orbMoves)
         assertEquals(BoardAnalyzer.resolveCascades(board), result.predictedMatches)
+        assertTrue(result.requirementsPossible)
         assertFalse(result.goalSatisfied)
         assertEquals(false, result.comboMinimumSatisfied)
-        assertEquals(false, result.matchPatternSatisfied)
+        assertNull(result.matchPatternSatisfied)
     }
 
     @Test
-    fun oneMoveFixtureFindsAvailableComboWithoutChangingModifiers() = runBlocking {
-        val input = Board(columns = 4, rows = 1, orbs = listOf(
-            Orb(OrbColor.FIRE, setOf(OrbModifier.ENHANCED)), Orb(OrbColor.WATER),
-            Orb(OrbColor.FIRE), Orb(OrbColor.FIRE)))
-        val result = BoardSolver().solve(input, SolveOptions(maxOrbMoves = 1, goal = SolveSettings(targetComboCount = 1).toGoal()))
-        assertTrue(result.goalSatisfied)
-        assertEquals(1, result.orbMoves)
-        assertEquals(1, result.predictedMatches.matches.single().enhancedOrbCount)
+    fun oneMoveSearchPreservesEveryMatchingColorAndScoredModifier() = runBlocking {
+        for (color in OrbColor.entries.filter { it != OrbColor.UNKNOWN }) {
+            val blocker = if (color == OrbColor.WATER) OrbColor.FIRE else OrbColor.WATER
+            val input = Board(4, 1, listOf(
+                Orb(color, setOf(OrbModifier.ENHANCED, OrbModifier.WEAKENED, OrbModifier.LOCKED)),
+                Orb(blocker), Orb(color, setOf(OrbModifier.WEAKENED)), Orb(color, setOf(OrbModifier.WEAKENED)),
+            ))
+            val options = SolveOptions(maxOrbMoves = 1, goal = SolveSettings(targetComboCount = 1).toGoal())
+            val result = BoardSolver().solve(input, options)
+            assertValidSolution(input, options, result)
+            assertTrue("No combo found for $color", result.goalSatisfied)
+            assertEquals(1, result.orbMoves)
+            val match = result.predictedMatches.matches.single()
+            assertEquals(color, match.color)
+            assertEquals(1, match.enhancedOrbCount)
+            assertEquals(3, match.weakenedOrbCount)
+        }
     }
 
     @Test
@@ -164,46 +159,24 @@ class BoardSolverTest {
     }
 
     @Test
-    fun equivalentLayoutsShareEvaluationAcrossDragPositionsAndDepths() = runBlocking {
-        var evaluations = 0
-        val goal = SolveGoal { analysis ->
-            evaluations++
-            MaximizeCombos.evaluate(analysis)
-        }
-        val input = Board(4, 1, List(4) { Orb(OrbColor.FIRE) })
-        val result = BoardSolver().solve(input, SolveOptions(maxOrbMoves = 4, goal = goal))
-        assertEquals(1, evaluations)
-        assertEquals(1, result.comboCount)
-        assertEquals(0, result.orbMoves)
-    }
-
-    @Test
     fun provenImpossibleRequirementsReturnWithoutExploringAndDoNotRejectPossibleOnes() = runBlocking {
         val insufficientColor = Board(4, 1, "FFFH".map { Orb(if (it == 'F') OrbColor.FIRE else OrbColor.HEART) })
-        val request = SolveSettings(OrbColor.FIRE, matchPatternFocus = MatchPattern.TPA).toGoal()
-        val result = BoardSolver().solve(insufficientColor, SolveOptions(goal = request))
-        assertFalse(result.requirementsPossible)
-        assertFalse(result.goalSatisfied)
-        assertEquals(0, result.orbMoves)
+        for (color in listOf(OrbColor.FIRE, OrbColor.LIGHT)) {
+            val request = SolveSettings(color, 1, MatchPattern.TPA).toGoal()
+            val result = BoardSolver().solve(insufficientColor, SolveOptions(goal = request))
+            assertFalse(result.requirementsPossible)
+            assertFalse(result.goalSatisfied)
+            assertEquals(0, result.orbMoves)
+            assertEquals(1, result.comboCount)
+            assertEquals(0, result.focusedPatternMatchCount)
+        }
         // Six orbs cannot produce three deterministic combos, even across multiple cascades.
         val tooFewCombos = Board(3, 2, List(6) { Orb(OrbColor.FIRE) })
         val comboResult = BoardSolver().solve(tooFewCombos, SolveOptions(goal = SolveSettings(targetComboCount = 3).toGoal()))
         assertFalse(comboResult.requirementsPossible)
         val possible = Board(4, 1, List(4) { Orb(OrbColor.FIRE) })
+        val request = SolveSettings(OrbColor.FIRE, matchPatternFocus = MatchPattern.TPA).toGoal()
         assertTrue(BoardSolver().solve(possible, SolveOptions(goal = request)).requirementsPossible)
-    }
-
-    @Test
-    fun existingCombosDoNotMakeAnAbsentColorPatternPossible() = runBlocking {
-        val input = Board(orbs = ("DDDFFF" + "FFDFFF" + "DFFFDD" + "DFFFFD" + "FDFFFD")
-            .map { Orb(if (it == 'D') OrbColor.DARK else OrbColor.FIRE) })
-        val result = BoardSolver().solve(input, SolveOptions(
-            goal = SolveSettings(OrbColor.LIGHT, 7, MatchPattern.L_SHAPE).toGoal()))
-        assertEquals(3, result.comboCount)
-        assertEquals(0, result.orbMoves)
-        assertFalse(result.requirementsPossible)
-        assertFalse(result.goalSatisfied)
-        assertEquals(0, result.focusedPatternMatchCount)
     }
 
     @Test

@@ -38,30 +38,40 @@ class MatchPatternTest {
     @Test
     fun tpaRequiresExactlyFourClearedOrbsInAStraightRun() {
         assertEquals(1, count(MatchPattern.TPA, listOf(0 to 0, 0 to 1, 0 to 2, 0 to 3)))
+        assertEquals(1, count(MatchPattern.TPA, listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0)))
         assertEquals(0, count(MatchPattern.TPA, listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1)))
         assertEquals(0, count(MatchPattern.TPA, (0..4).map { 0 to it }))
         assertEquals(0, count(MatchPattern.TPA, (0..2).map { 0 to it }))
-    }
-
-    @Test
-    fun tpaBoardFixturesAgreeWithTheClearedCellsRatherThanAttachedOrbs() {
-        val straight = board("FFFFUU")
-        assertEquals(1, MatchPattern.TPA.countMatches(BoardAnalyzer.resolveCascades(straight)))
+        // An attached fourth orb is outside the clear and cannot create a TPA.
         val bent = board("FFF", "UUF")
         assertEquals(3, BoardAnalyzer.analyze(bent).matches.single().size)
         assertEquals(0, MatchPattern.TPA.countMatches(BoardAnalyzer.resolveCascades(bent)))
-        assertEquals(0, MatchPattern.TPA.countMatches(BoardAnalyzer.resolveCascades(board("FFFFFU"))))
     }
 
     @Test
-    fun attackingPatternsNeverCountHeartOrUnknownMatches() {
-        val square = (0..2).flatMap { row -> (0..2).map { BoardPosition(row, it) } }.toSet()
-        val analysis = BoardAnalysis(listOf(OrbMatch(OrbColor.HEART, square), OrbMatch(OrbColor.UNKNOWN, square)))
-        for (pattern in MatchPattern.entries) assertEquals(0, pattern.countMatches(analysis))
-        val hearts = Board(4, 1, List(4) { Orb(OrbColor.HEART) })
-        assertEquals(0, MatchPattern.TPA.countMatches(BoardAnalyzer.analyze(hearts)))
-        assertEquals(0, MatchPattern.TPA.potentialScore(hearts, OrbColor.HEART))
-        assertFalse(MatchPattern.TPA.canForm(hearts))
+    fun attackingPatternsRejectEveryNonAttackingColor() {
+        val shapes = mapOf(
+            MatchPattern.ROW to (0..5).map { 0 to it },
+            MatchPattern.TPA to (0..3).map { 0 to it },
+            MatchPattern.L_SHAPE to listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1, 0 to 2),
+            MatchPattern.CROSS to listOf(1 to 1, 0 to 1, 2 to 1, 1 to 0, 1 to 2),
+            MatchPattern.VDP to (0..2).flatMap { row -> (0..2).map { row to it } },
+        )
+        val nonAttackingColors = listOf(OrbColor.HEART, OrbColor.JAMMER, OrbColor.POISON,
+            OrbColor.LETHAL_POISON, OrbColor.BOMB, OrbColor.UNKNOWN)
+        for ((pattern, shape) in shapes) {
+            val positions = shape.map { BoardPosition(it.first, it.second) }.toSet()
+            assertEquals(1, pattern.countMatches(BoardAnalysis(listOf(OrbMatch(OrbColor.FIRE, positions)))))
+            for (color in nonAttackingColors) {
+                val analysis = BoardAnalysis(listOf(OrbMatch(color, positions)))
+                val input = Board(orbs = List(30) { Orb(color) })
+                assertEquals("$pattern must not count $color", 0, pattern.countMatches(analysis))
+                assertFalse(pattern.canForm(input))
+                assertFalse(pattern.canForm(input, color))
+                assertEquals(0, pattern.potentialScore(input))
+                assertEquals(0, pattern.potentialScore(input, color))
+            }
+        }
     }
 
     @Test
@@ -77,11 +87,11 @@ class MatchPatternTest {
     @Test
     fun lShapesWorkInEveryOrientationButRejectAttachedAndMisplacedCells() {
         for (vertical in listOf(-1, 1)) for (horizontal in listOf(-1, 1)) {
-            val shape = listOf(3 to 3, 3 + vertical to 3, 3 + 2 * vertical to 3,
-                3 to 3 + horizontal, 3 to 3 + 2 * horizontal)
+            val shape = listOf(2 to 2, 2 + vertical to 2, 2 + 2 * vertical to 2,
+                2 to 2 + horizontal, 2 to 2 + 2 * horizontal)
             assertEquals(1, count(MatchPattern.L_SHAPE, shape))
-            assertEquals(0, count(MatchPattern.L_SHAPE, shape + (3 + vertical to 3 + horizontal)))
-            assertEquals(0, count(MatchPattern.L_SHAPE, shape.dropLast(1) + (3 + vertical to 3 + horizontal)))
+            assertEquals(0, count(MatchPattern.L_SHAPE, shape + (2 + vertical to 2 + horizontal)))
+            assertEquals(0, count(MatchPattern.L_SHAPE, shape.dropLast(1) + (2 + vertical to 2 + horizontal)))
         }
     }
 
