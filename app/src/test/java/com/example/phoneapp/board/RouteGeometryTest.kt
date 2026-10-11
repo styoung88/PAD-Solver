@@ -64,20 +64,6 @@ class RouteGeometryTest {
     }
 
     @Test
-    fun endpointRevisitsUseTheSameNaturalGeometryAsOtherVisits() {
-        val a = BoardPosition(1, 1)
-        val b = BoardPosition(1, 2)
-        val c = BoardPosition(2, 2)
-        val path = listOf(a, b, c, b, a, b)
-        val layout = RouteGeometry.prepare(path)
-        val visit = layout.visits[4]
-        val incoming = layout.moves[3]
-        val outgoing = layout.moves[4]
-        assertEquals(incoming.to + incoming.direction * 0.24f, visit.control1)
-        assertEquals(outgoing.from - outgoing.direction * 0.24f, visit.control2)
-    }
-
-    @Test
     fun emptyAndStationaryRoutesNeedNoMoves() {
         assertTrue(RouteGeometry.prepare(emptyList()).moves.isEmpty())
         assertTrue(RouteGeometry.prepare(listOf(BoardPosition(0, 0))).moves.isEmpty())

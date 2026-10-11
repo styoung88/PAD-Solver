@@ -57,8 +57,11 @@ class SolveSettingsTest {
 
     @Test
     fun onlyAttackingColorsAndPositiveTargetsAreValidSettings() {
-        for (color in OrbColor.attackingColors) assertEquals(color, SolveSettings(color, 6).toGoal().preferredColor)
-        for (color in listOf(OrbColor.HEART, OrbColor.UNKNOWN)) {
+        for (color in listOf(OrbColor.FIRE, OrbColor.WATER, OrbColor.WOOD, OrbColor.LIGHT, OrbColor.DARK)) {
+            assertEquals(color, SolveSettings(color, 6).toGoal().preferredColor)
+        }
+        for (color in listOf(OrbColor.HEART, OrbColor.JAMMER, OrbColor.POISON,
+            OrbColor.LETHAL_POISON, OrbColor.BOMB, OrbColor.UNKNOWN)) {
             assertThrows(IllegalArgumentException::class.java) { SolveSettings(color) }
         }
         for (target in listOf(0, -1)) {
