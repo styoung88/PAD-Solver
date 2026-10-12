@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.unit.dp
@@ -73,7 +74,7 @@ class SolveSettingsDrawerTest {
         compose.onNode(hasText("Wood") and hasText("Optimize color damage for")).performScrollTo().assertIsDisplayed()
         selectChoice("Optimize color damage for", "Fire")
         compose.onNodeWithText("Apply and recalculate").performClick()
-        waitForText("Fire", excludeFieldLabel = "Optimize color damage for")
+        waitForText("Fire", withinTag = "route-stat-Fire")
         compose.onNodeWithText("Wood").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD").performScrollTo().assertIsDisplayed()
     }
@@ -255,9 +256,9 @@ class SolveSettingsDrawerTest {
         }
     }
 
-    private fun waitForText(text: String, excludeFieldLabel: String? = null) {
-        val selector = if (excludeFieldLabel == null) hasText(text)
-            else hasText(text) and !hasText(excludeFieldLabel)
+    private fun waitForText(text: String, withinTag: String? = null) {
+        val selector = if (withinTag == null) hasText(text)
+            else hasText(text) and hasAnyAncestor(hasTestTag(withinTag))
         compose.waitUntil(timeoutMillis = 30_000) {
             compose.onAllNodes(selector).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
