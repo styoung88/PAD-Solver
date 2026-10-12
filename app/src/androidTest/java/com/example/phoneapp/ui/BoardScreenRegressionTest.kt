@@ -22,7 +22,10 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.test.espresso.Espresso.pressBack
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import com.example.phoneapp.awaitNativeObject
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardAnalyzer
@@ -150,7 +153,9 @@ class BoardScreenRegressionTest {
         compose.onNodeWithText("1 match +3 bonus").assertIsDisplayed()
         compose.onNodeWithText("Combo breakdown").assertDoesNotExist()
         compose.onNodeWithText("Close").assertDoesNotExist()
-        pressBack()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        checkNotNull(device.awaitNativeObject(By.text("1 match +3 bonus"), 10_000))
+        device.pressBack()
         compose.onNodeWithText("1 match +3 bonus").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD 0").performScrollTo().assertIsDisplayed()
     }

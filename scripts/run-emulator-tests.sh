@@ -20,9 +20,11 @@ trap 'kill "$logcat_pid" 2>/dev/null || true' EXIT
 status=0
 bash ./gradlew --no-daemon --build-cache :app:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.nativeUiDiagnostics=true \
+  -Pandroid.testInstrumentationRunnerArguments.recoverSystemUiAnr=true \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true || status=$?
+# Retain diagnostics for System UI recovery even when every test passes.
+adb pull /sdcard/Android/data/com.example.phoneapp/files/native-ui-failures "$diagnostics_directory/" || true
 if [ "$status" -ne 0 ]; then
-  adb pull /sdcard/Android/data/com.example.phoneapp/files/native-ui-failures "$diagnostics_directory/" || true
   adb shell dumpsys window > "$diagnostics_directory/windows.txt" || true
   adb shell dumpsys accessibility > "$diagnostics_directory/accessibility.txt" || true
   adb shell dumpsys power > "$diagnostics_directory/power.txt" || true
