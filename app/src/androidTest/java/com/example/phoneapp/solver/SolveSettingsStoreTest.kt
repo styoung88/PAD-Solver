@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.board.OrbColor
+import com.example.phoneapp.game.GameVariant
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -83,6 +84,40 @@ class SolveSettingsStoreTest {
     }
 
     @Test
+    fun gameSelectionDefaultsPersistsAndRejectsInvalidValues() {
+        val store = SolveSettingsStore(preferences)
+        assertEquals(GameVariant.PAD, store.load().game)
+        store.save(SolveSettings(game = GameVariant.PAD_ZERO, targetComboCount = 6))
+        assertEquals(SolveSettings(game = GameVariant.PAD_ZERO, targetComboCount = 6),
+            SolveSettingsStore(preferences).load())
+        for (value in listOf("REMOVED_GAME", "", "PAD")) {
+            preferences.edit().putString("game_variant", value).commit()
+            assertEquals(GameVariant.PAD, store.load().game)
+            assertEquals(6, store.load().targetComboCount)
+        }
+        preferences.edit().putInt("game_variant", 1).commit()
+        assertEquals(GameVariant.PAD, store.load().game)
+    }
+
+    @Test
+    fun gameObserverIgnoresOtherPreferencesAndCanBeUnregistered() {
+        val store = SolveSettingsStore(preferences)
+        var changes = 0
+        lateinit var stopObserving: () -> Unit
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            stopObserving = store.observeGameChanges { changes++ }
+            store.save(SolveSettings(game = GameVariant.PAD_ZERO))
+            assertEquals(1, changes)
+            store.save(SolveSettings(game = GameVariant.PAD_ZERO, targetComboCount = 5))
+            assertEquals(1, changes)
+            stopObserving()
+            store.save(SolveSettings())
+            assertEquals(1, changes)
+        }
+    }
+
+    @Test
     fun searchLevelsPersistAndInvalidValuesUseMedium() {
         val store = SolveSettingsStore(preferences)
         for (movement in OrbMovement.entries) {
@@ -94,5 +129,32 @@ class SolveSettingsStoreTest {
         }
         preferences.edit().putInt("orb_movement", 1).putString("search_complexity", "OLD").commit()
         assertEquals(SolveSettings(), store.load())
+    }
+
+    @Test fun padZeroTeamSkillsPersistAcrossGameChangesAndSeparateReaders() {
+        val store = SolveSettingsStore(preferences)
+        for (skill in PadZeroTeamSkill.entries) {
+            val settings = SolveSettings(game = GameVariant.PAD_ZERO, padZeroTeamSkill = skill,
+                requireDamageReduction = true, teamAttackingAttributes = setOf(OrbColor.FIRE, OrbColor.WOOD))
+            store.save(settings)
+            assertEquals(settings, SolveSettingsStore(preferences).load())
+            store.save(settings.copy(game = GameVariant.PAD))
+            assertEquals(settings.copy(game = GameVariant.PAD), store.load())
+        }
+        val emptyAttributes = SolveSettings(game = GameVariant.PAD_ZERO, teamAttackingAttributes = emptySet())
+        store.save(emptyAttributes)
+        assertEquals(emptyAttributes, store.load())
+    }
+
+    @Test fun corruptTeamSettingsFallBackWithoutAffectingExistingPreferences() {
+        preferences.edit().putInt("pad_zero_team_skill", 4)
+            .putString("pad_zero_require_damage_reduction", "true")
+            .putString("pad_zero_attacking_attributes", "FIRE")
+            .putString("preferred_orb_color", "WOOD").commit()
+        val expected = SolveSettings(preferredColor = OrbColor.WOOD)
+        assertEquals(expected, SolveSettingsStore(preferences).load())
+        preferences.edit().putString("pad_zero_team_skill", "REMOVED")
+            .putStringSet("pad_zero_attacking_attributes", setOf("FIRE", "HEART", "OLD_COLOR")).commit()
+        assertEquals(expected, SolveSettingsStore(preferences).load())
     }
 }

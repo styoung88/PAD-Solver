@@ -25,6 +25,7 @@ import com.example.phoneapp.board.BoardSize
 import com.example.phoneapp.board.BoardPosition
 import com.example.phoneapp.board.RouteArrowRenderer
 import com.example.phoneapp.MainActivity
+import com.example.phoneapp.game.GameVariant
 import com.example.phoneapp.solver.BoardSolver
 import com.example.phoneapp.solver.SolveSettingsStore
 import com.example.phoneapp.util.dpToPx
@@ -36,6 +37,9 @@ class SolutionOverlayService : Service() {
     private var latestCaptureUri: Uri? = null
     private var screenshotReadJob: kotlinx.coroutines.Job? = null
     private var capturePending = false
+    private var captureGame = GameVariant.PAD
+    private var game = GameVariant.PAD
+    private var stopObservingGame: (() -> Unit)? = null
     private val toolbarPreferences by lazy { getSharedPreferences("overlay_toolbar", MODE_PRIVATE) }
     private val settingsStore by lazy { SolveSettingsStore(this) }
     private val screenshotShortcut by lazy { ScreenshotShortcut(this) }
@@ -54,10 +58,12 @@ class SolutionOverlayService : Service() {
         refreshScreenshotShortcut()
         if (!enabled || !screenshotShortcut.canWatch(PhotoAccess.current(this))) return@Runnable
         screenshotReadJob?.cancel()
+        val gameAtRead = game
         screenshotReadJob = scope.launch {
             try {
                 val image = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { screenshots.next() }
-                if (image != null && screenshotShortcut.canWatch(PhotoAccess.current(this@SolutionOverlayService))) solveImage(image)
+                if (image != null && gameAtRead == game &&
+                    screenshotShortcut.canWatch(PhotoAccess.current(this@SolutionOverlayService))) solveImage(image)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -99,6 +105,8 @@ class SolutionOverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        game = settingsStore.load().game
+        stopObservingGame = settingsStore.observeGameChanges(::refreshGame)
         enabled = true
         startAsForeground()
         handler.post(refreshShortcut)
@@ -121,11 +129,26 @@ class SolutionOverlayService : Service() {
         routeView = null
     }
 
+    private fun refreshGame() {
+        val selected = settingsStore.load().game
+        if (selected == game) return
+        game = selected
+        clearRoute()
+        screenshotReadJob?.cancel()
+        handler.removeCallbacks(checkScreenshots)
+        latestCaptureUri = null
+        capturePending = false
+        stopService(Intent(this, ScreenCaptureService::class.java))
+        toolbarView?.visibility = View.VISIBLE
+        toolbarView?.setStatus("${game.displayName} selected. Capture a new board.")
+    }
+
     private fun solveCapture(path: String) {
         solveImage(Uri.fromFile(java.io.File(path)))
     }
 
     private fun solveImage(uri: Uri) {
+        val settings = settingsStore.load()
         clearRoute()
         capturePending = false
         latestCaptureUri = uri
@@ -134,11 +157,10 @@ class SolutionOverlayService : Service() {
         toolbarView?.setStatus("Reading board…", busy = true)
         solveJob = scope.launch {
             try {
-                val settings = settingsStore.load()
                 val recognized = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     val bitmap = BoardImageLoader.read(this@SolutionOverlayService, uri) ?: return@withContext null
                     try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                        PadBoardRecognizer().recognize(bitmap) as? BoardRecognition.Recognized
+                        BoardRecognizer.forGame(settings.game).recognize(bitmap) as? BoardRecognition.Recognized
                     } }
                     finally { bitmap.recycle() }
                 }
@@ -151,7 +173,7 @@ class SolutionOverlayService : Service() {
                 if (result.goalSatisfied) {
                     showRoute(recognized.boardBounds, result.path.map(recognized.board::indexOf).toIntArray(),
                         recognized.captureWidth, recognized.captureHeight, recognized.board.columns, recognized.board.rows)
-                    toolbarView?.setStatus("${result.comboCount} combos")
+                    toolbarView?.setStatus(result.routeSummary)
                 } else {
                     toolbarView?.setStatus("No matching route. Adjust your settings.", isError = true)
                 }
@@ -200,10 +222,12 @@ class SolutionOverlayService : Service() {
                 clearRoute()
                 latestCaptureUri = null
                 capturePending = true
+                captureGame = game
                 toolbarView?.visibility = View.INVISIBLE
                 return START_NOT_STICKY
             }
             ACTION_SOLVE_CAPTURE -> {
+                if (!capturePending || captureGame != game) return START_NOT_STICKY
                 capturePending = false
                 intent.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(::solveCapture)
                 return START_NOT_STICKY
@@ -212,6 +236,10 @@ class SolutionOverlayService : Service() {
         if (intent?.action == ACTION_HIDE) {
             stopService(Intent(this, ScreenCaptureService::class.java))
             stopSelf()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_SHOW && GameVariant.fromName(intent.getStringExtra(EXTRA_GAME_VARIANT)) != game) {
+            clearRoute()
             return START_NOT_STICKY
         }
         val bounds = intent?.parcelableExtra<RectF>(EXTRA_BOARD_BOUNDS) ?: run {
@@ -233,10 +261,14 @@ class SolutionOverlayService : Service() {
         }
         showRoute(bounds, positions, captureWidth, captureHeight, columns, rows)
         if (intent.hasExtra(EXTRA_COMBO_COUNT)) {
-            toolbarView?.setStatus("${intent.getIntExtra(EXTRA_COMBO_COUNT, 0)} combos")
+            toolbarView?.setStatus(intent.getStringExtra(EXTRA_ROUTE_SUMMARY)
+                ?: comboStatus(intent.getIntExtra(EXTRA_COMBO_COUNT, 0), intent.getIntExtra(EXTRA_BONUS_COMBO_COUNT, 0)))
         }
         return START_NOT_STICKY
     }
+
+    private fun comboStatus(total: Int, bonus: Int): String =
+        "$total combos" + if (bonus > 0) " · +$bonus bonus" else ""
 
     private fun showRoute(bounds: RectF, positions: IntArray, captureWidth: Int, captureHeight: Int, columns: Int, rows: Int) {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -291,7 +323,7 @@ class SolutionOverlayService : Service() {
                 toolbarLayoutParams?.let { toolbarPreferences.edit().putInt("x", it.x).putInt("y", it.y).apply() }
             },
         ).apply {
-            setStatus("")
+            setStatus(game.displayName)
         }
         toolbarView = toolbar
         refreshScreenshotShortcut()
@@ -327,6 +359,8 @@ class SolutionOverlayService : Service() {
 
     override fun onDestroy() {
         enabled = false
+        stopObservingGame?.invoke()
+        stopObservingGame = null
         handler.removeCallbacksAndMessages(null)
         if (screenshotObserverRegistered) contentResolver.unregisterContentObserver(screenshotObserver)
         scope.cancel()
@@ -407,6 +441,9 @@ class SolutionOverlayService : Service() {
 
     companion object {
         const val EXTRA_COMBO_COUNT = "combo_count"
+        const val EXTRA_BONUS_COMBO_COUNT = "bonus_combo_count"
+        const val EXTRA_ROUTE_SUMMARY = "route_summary"
+        const val EXTRA_GAME_VARIANT = "game_variant"
         @Volatile var enabled = false
             private set
         const val ACTION_PROCESSING = "com.example.phoneapp.action.PROCESSING"

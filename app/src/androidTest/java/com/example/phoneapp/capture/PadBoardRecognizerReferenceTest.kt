@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.board.OrbColor
+import com.example.phoneapp.game.GameVariant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -21,7 +22,7 @@ class PadBoardRecognizerReferenceTest {
 
         try {
             val startNanos = SystemClock.elapsedRealtimeNanos()
-            val result = PadBoardRecognizer().recognize(screenshot)
+            val result = BoardRecognizer.forGame(GameVariant.PAD).recognize(screenshot)
             val elapsedMillis = (SystemClock.elapsedRealtimeNanos() - startNanos) / 1_000_000
             Log.i(BENCHMARK_TAG, "Reference recognition took ${elapsedMillis}ms")
             assertTrue("Expected a recognized board, got $result", result is BoardRecognition.Recognized)

@@ -4,6 +4,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +41,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.getValue
@@ -70,11 +72,13 @@ import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.capture.PhotoAccess
+import com.example.phoneapp.game.GameVariant
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.MatchPattern
 import com.example.phoneapp.solver.SolveSettings
 import com.example.phoneapp.solver.OrbMovement
 import com.example.phoneapp.solver.SearchComplexity
+import com.example.phoneapp.solver.PadZeroTeamSkill
 import com.example.phoneapp.solver.comboCapacity
 
 @Composable
@@ -115,6 +119,7 @@ internal fun HomeScreen(
     onScreenshotShortcutChanged: (Boolean) -> Unit,
     onManagePhotoAccess: () -> Unit,
     onOpenSettings: () -> Unit = {},
+    game: GameVariant = GameVariant.PAD,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)
@@ -137,23 +142,23 @@ internal fun HomeScreen(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SolverAppBar(onOpenSettings, enabled = true)
+            SolverAppBar(onOpenSettings, enabled = true, game = game)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Find your next route.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                Text("Solve a board and follow the route in PAD.",
+                Text("Solve a board and follow the route in ${game.displayName}.",
                     style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Solve while you play", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("Tap Capture in the floating toolbar, or enable screenshots below to solve screenshots you take while playing.")
-                    Button(onClick = onCapture, modifier = Modifier.fillMaxWidth()) { Text("Open PAD overlay") }
+                    Button(onClick = onCapture, modifier = Modifier.fillMaxWidth()) { Text("Open ${game.displayName} overlay") }
                 }
             }
             Card {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Solve a saved board", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Pick a screenshot to review and solve. Show the route in PAD when you’re ready.")
+                    Text("Pick a screenshot to review and solve. Show the route in ${game.displayName} when you’re ready.")
                     OutlinedButton(onClick = onChooseScreenshot, modifier = Modifier.fillMaxWidth()) { Text("Choose existing screenshot") }
                 }
             }
@@ -187,6 +192,19 @@ fun BoardPreviewScreen(
     onNewBoard: () -> Unit,
 ) {
     when (recognition) {
+        is BoardRecognition.Unsupported -> Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text("${recognition.game.displayName} support", style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(8.dp))
+            Text(recognition.game.recognitionUnavailableMessage)
+            Spacer(Modifier.height(20.dp))
+            Button(onClick = onOpenSettings) { Text("Change game") }
+            OutlinedButton(onClick = onNewBoard) { Text("New board") }
+        }
+
         is BoardRecognition.Uncertain -> Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -206,12 +224,19 @@ fun BoardPreviewScreen(
                         .windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    SolverAppBar(onOpenSettings, !isSolving)
+                    SolverAppBar(onOpenSettings, enabled = true, game = settings.game)
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Board captured", style = MaterialTheme.typography.titleLarge)
                             Text("Check the detected orbs below, then choose your solve settings.")
+                            if (recognition.board.orbs.any { OrbModifier.COMBO_BONUS in it.modifiers }) {
+                                Text("Top-right +1 badges add one combo per marked orb cleared in a match.",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
                             SolveSettingsSummary(settings.preferredColor, settings.targetComboCount, settings.matchPatternFocus)
+                            if (settings.game == GameVariant.PAD_ZERO && settings.padZeroTeamSkill != PadZeroTeamSkill.NONE) {
+                                Text("Team skill: ${settings.padZeroTeamSkill.displayName}", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -267,13 +292,30 @@ fun SolveSettingsDrawer(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(20.dp))
+                    ChoiceDropdown(
+                        selectedValue = settings.game,
+                        choices = GameVariant.entries.map { it to it.displayName },
+                        label = "Game",
+                        enabled = true,
+                        onSelected = { game -> game?.let { onSettingsChanged(settings.copy(game = it)) } },
+                    )
+                    if (settings.game == GameVariant.PAD_ZERO) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("+1 badges add combos when matched.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(16.dp))
+                        PadZeroTeamSkillSettings(settings, !isSolving, onSettingsChanged)
+                    }
+                    Spacer(Modifier.height(20.dp))
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
                             Text("Combo target", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             ComboTargetDropdown(
                                 selectedTarget = settings.targetComboCount,
-                                maximumTarget = (board?.orbs?.size ?: BoardSize.LARGE.cellCount) / 3,
+                                maximumTarget = board?.comboCapacity?.coerceAtLeast(1)
+                                    ?: if (settings.game == GameVariant.PAD_ZERO) BoardSize.STANDARD.cellCount * 4 / 3
+                                    else BoardSize.LARGE.cellCount / 3,
                                 enabled = !isSolving,
                                 onTargetSelected = { onSettingsChanged(settings.copy(targetComboCount = it)) },
                             )
@@ -299,7 +341,9 @@ fun SolveSettingsDrawer(
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "Meet the combo minimum and at least one selected pattern match, then maximize color damage or combos.",
+                                if (settings.game == GameVariant.PAD_ZERO && settings.padZeroTeamSkill != PadZeroTeamSkill.NONE)
+                                    "Meet your requirements, then maximize relative damage with the team skill. Any color gives attacking colors equal weight."
+                                else "Meet the combo minimum and at least one selected pattern match, then maximize color damage or combos.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -394,6 +438,7 @@ fun SolutionScreen(
     onOpenSettings: () -> Unit,
     onShowInGame: () -> Unit,
     onNewBoard: () -> Unit,
+    game: GameVariant = GameVariant.PAD,
 ) {
     val unmetRequirements = buildList {
         if (solution.targetComboCount != null && solution.comboMinimumSatisfied != true) {
@@ -401,6 +446,9 @@ fun SolutionScreen(
         }
         if (solution.matchPatternFocus != null && solution.matchPatternSatisfied != true) {
             add("a ${solution.preferredColor?.let { "${orbColorName(it)} " }.orEmpty()}${solution.matchPatternFocus.displayName} match")
+        }
+        if (solution.damageReductionRequired && solution.teamSkillEvaluation?.damageReductionPercent == 0) {
+            add("damage reduction")
         }
     }
     val preferredColorComboCount = solution.preferredColor?.let { color ->
@@ -412,7 +460,7 @@ fun SolutionScreen(
                 .windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SolverAppBar(onOpenSettings, !isSolving)
+            SolverAppBar(onOpenSettings, enabled = true, game = game)
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val resultTitle = when {
@@ -422,12 +470,19 @@ fun SolutionScreen(
                     }
                     Text(resultTitle, style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold)
+                    if (solution.predictedMatches.bonusComboCount > 0) {
+                        val matches = solution.predictedMatches.physicalComboCount
+                        val bonuses = solution.predictedMatches.bonusComboCount
+                        Text("$matches ${if (matches == 1) "match" else "matches"} + $bonuses bonus ${if (bonuses == 1) "combo" else "combos"}",
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
                     if (solution.requirementsPossible) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             RouteStat("${solution.orbMoves}", "Orb moves", Modifier.weight(1f))
                             RouteStat("${solution.predictedMatches.cascadeCount}", "Cascades", Modifier.weight(1f))
                             if (solution.preferredColor != null && preferredColorComboCount != null) {
-                                RouteStat("$preferredColorComboCount", "${orbColorName(solution.preferredColor)} combos", Modifier.weight(1f))
+                                RouteStat("$preferredColorComboCount", "${orbColorName(solution.preferredColor)} " +
+                                    if (game == GameVariant.PAD_ZERO) "matches" else "combos", Modifier.weight(1f))
                             }
                         }
                         solution.matchPatternFocus?.let {
@@ -436,6 +491,16 @@ fun SolutionScreen(
                         }
                     }
                     SolveSettingsSummary(solution.preferredColor, solution.targetComboCount, solution.matchPatternFocus)
+                    solution.teamSkillEvaluation?.let { team ->
+                        Text("Team skill: ${team.skill.displayName}", style = MaterialTheme.typography.bodyMedium)
+                        Text(team.attackSummary, style = MaterialTheme.typography.titleMedium)
+                        team.damageReductionSummary?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                        if (team.bonusAttackDamage > 0) {
+                            Text("Bonus attack: ${team.bonusAttackDamage} damage", style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Text("Relative damage estimate. Move-time bonuses and recovery are not included.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     val hazardLabels = recognition.board.orbs.mapNotNull { orb -> when (orb.color) {
                         OrbColor.JAMMER -> "J: Jammer"
                         OrbColor.POISON -> "P: Poison"
@@ -465,7 +530,7 @@ fun SolutionScreen(
                 verticalAlignment = Alignment.CenterVertically) {
                 if (unmetRequirements.isEmpty()) {
                     Button(onClick = onShowInGame, enabled = !isSolving, modifier = Modifier.weight(1f)) {
-                        Text("Show route in PAD")
+                        Text("Show route in ${game.displayName}")
                     }
                 } else {
                     Button(onClick = onOpenSettings, enabled = !isSolving, modifier = Modifier.weight(1f)) {
@@ -486,12 +551,78 @@ fun SolutionScreen(
 }
 
 @Composable
-private fun SolverAppBar(onSettings: () -> Unit, enabled: Boolean) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("PAD Solver", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-        IconButton(onClick = onSettings, enabled = enabled,
-            modifier = Modifier.semantics { contentDescription = "Open solve settings" }) {
-            Text("⚙", style = MaterialTheme.typography.headlineSmall)
+private fun SolverAppBar(onSettings: () -> Unit, enabled: Boolean, game: GameVariant = GameVariant.PAD) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("PAD Solver", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            IconButton(onClick = onSettings, enabled = enabled,
+                modifier = Modifier.semantics { contentDescription = "Open solve settings" }) {
+                Text("⚙", style = MaterialTheme.typography.headlineSmall)
+            }
+        }
+        Text("Game: ${game.displayName}", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun PadZeroTeamSkillSettings(
+    settings: SolveSettings,
+    enabled: Boolean,
+    onSettingsChanged: (SolveSettings) -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoiceDropdown(
+                selectedValue = settings.padZeroTeamSkill,
+                choices = PadZeroTeamSkill.entries.map { it to it.displayName },
+                label = "Team skill",
+                enabled = enabled,
+                onSelected = { value -> value?.let {
+                    onSettingsChanged(settings.copy(padZeroTeamSkill = it, requireDamageReduction = false))
+                } },
+            )
+            Text(settings.padZeroTeamSkill.description, style = MaterialTheme.typography.bodySmall)
+            if (settings.padZeroTeamSkill != PadZeroTeamSkill.NONE) {
+                Text("Move-time bonuses and recovery are not included.", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (settings.padZeroTeamSkill.usesTeamAttributeSelection) {
+                Text("Team attack attributes", style = MaterialTheme.typography.titleSmall)
+                Text("Include your team's main and sub-attributes.", style = MaterialTheme.typography.bodySmall)
+                OrbColor.attackingColors.forEach { color ->
+                    val selected = color in settings.teamAttackingAttributes
+                    Row(Modifier.fillMaxWidth().toggleable(
+                        value = selected, enabled = enabled, role = Role.Checkbox,
+                        onValueChange = { checked -> onSettingsChanged(settings.copy(
+                            teamAttackingAttributes = if (checked) settings.teamAttackingAttributes + color
+                                else settings.teamAttackingAttributes - color,
+                        )) },
+                    ).semantics { contentDescription = "${orbColorName(color)} attack attribute" },
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = selected, onCheckedChange = null, enabled = enabled)
+                        Text(orbColorName(color))
+                    }
+                }
+                val minimum = settings.padZeroTeamSkill.attributeTiers.first().first
+                if (settings.teamAttackingAttributes.size < minimum) {
+                    Text("This skill needs at least $minimum attacking attributes on the team to activate its ATK bonus.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                if (settings.preferredColor != null && settings.preferredColor !in settings.teamAttackingAttributes) {
+                    Text("The focused color is not one of this team's attacking attributes. Choose another color focus or update the team attributes.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+            if (settings.padZeroTeamSkill.hasIndependentDamageReduction) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Damage reduction", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                    Switch(checked = settings.requireDamageReduction, enabled = enabled,
+                        modifier = Modifier.semantics { contentDescription = "Damage reduction" },
+                        onCheckedChange = { onSettingsChanged(settings.copy(requireDamageReduction = it)) })
+                }
+                Text("Require a route that activates the team's damage reduction.", style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
@@ -590,7 +721,7 @@ private fun ComboTargetDropdown(
     ChoiceDropdown(
         selectedValue = selectedTarget,
         choices = listOf(null to "No minimum") + targets.map {
-            it to if (it > maximumTarget) "$it (exceeds board size)" else "$it"
+            it to if (it > maximumTarget) "$it (exceeds board limit)" else "$it"
         },
         label = "Minimum combos",
         enabled = enabled,
@@ -698,17 +829,15 @@ fun OrbBoard(
                     paint.textSize = radius * 0.85f
                     native.drawText(hazardLabel, centerX, centerY + radius * 0.3f, paint)
                 }
-                if (OrbModifier.LOCKED in orb.modifiers) {
-                    paint.color = android.graphics.Color.rgb(255, 221, 74)
-                    paint.style = android.graphics.Paint.Style.STROKE
-                    paint.strokeWidth = radius * 0.07f
-                    val lockX = centerX - radius * 0.55f
-                    val lockY = centerY - radius * 0.55f
-                    native.drawArc(lockX - radius * 0.12f, lockY - radius * 0.24f,
-                        lockX + radius * 0.12f, lockY + radius * 0.03f, 180f, 180f, false, paint)
+                if (OrbModifier.COMBO_BONUS in orb.modifiers) {
                     paint.style = android.graphics.Paint.Style.FILL
-                    native.drawRoundRect(lockX - radius * 0.2f, lockY - radius * 0.03f,
-                        lockX + radius * 0.2f, lockY + radius * 0.24f, radius * 0.04f, radius * 0.04f, paint)
+                    paint.color = android.graphics.Color.rgb(20, 31, 44)
+                    native.drawCircle(centerX + radius * 0.55f, centerY - radius * 0.55f, radius * 0.34f, paint)
+                    paint.color = android.graphics.Color.rgb(100, 230, 210)
+                    paint.textAlign = android.graphics.Paint.Align.CENTER
+                    paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+                    paint.textSize = radius * 0.42f
+                    native.drawText("+1", centerX + radius * 0.55f, centerY - radius * 0.40f, paint)
                 }
                 if (OrbModifier.ENHANCED in orb.modifiers || OrbModifier.WEAKENED in orb.modifiers) {
                     paint.style = android.graphics.Paint.Style.FILL

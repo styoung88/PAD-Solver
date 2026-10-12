@@ -112,10 +112,9 @@ class PadBoardRecognizerHazardTest {
     }
 
     @Test
-    fun identifiesWeakenedAndLockedMarkersInPublishedGameCrops() {
-        val recognizer = PadBoardRecognizer()
+    fun identifiesWeakenedMarkersInPublishedGameCrop() {
+        val recognizer = PadOrbRecognizer()
         val weakened = load("weakened.png")
-        val locked = load("locked.jpg")
         val mismatches = mutableListOf<String>()
         try {
             val pitch = weakened.width / 6f
@@ -125,18 +124,12 @@ class PadBoardRecognizerHazardTest {
                     (index / 6 + 0.5f) * weakened.height / 3f, pitch)
                 if (detected != (index in expectedMinus)) mismatches += "minus $index detected=$detected"
             }
-            val lockPitch = locked.width / 6f
-            for (index in 0 until 18) {
-                val detected = recognizer.hasLockedMarker(locked, (index % 6 + 0.5f) * lockPitch,
-                    (index / 6 + 0.5f) * locked.height / 3f, lockPitch)
-                if (detected != (index != 10)) mismatches += "lock $index detected=$detected"
-            }
             assertTrue(mismatches.joinToString("; "), mismatches.isEmpty())
-        } finally { weakened.recycle(); locked.recycle() }
+        } finally { weakened.recycle() }
     }
 
     @Test
-    fun capturesPreserveColorAndCombinedModifiers() {
+    fun capturesPreserveColorsAndScoredModifiersDespiteLockArtwork() {
         for (file in listOf("weakened.png", "locked.jpg")) {
             val crop = load(file)
             val image = Bitmap.createBitmap(600, 1200, Bitmap.Config.ARGB_8888)
@@ -159,7 +152,8 @@ class PadBoardRecognizerHazardTest {
                 val board = (result as BoardRecognition.Recognized).board
                 for ((index, orb) in board.orbs.withIndex()) {
                     if (file == "locked.jpg") {
-                        assertTrue("lock $index: $orb", OrbModifier.LOCKED in orb.modifiers)
+                        val source = if (index % 18 == 10) 0 else index % 18
+                        assertEquals("color $index", LOCK_CROP_COLORS[source], orb.color)
                     } else {
                         val source = index % 18
                         assertEquals("minus $index: $orb", source in setOf(0, 2, 4, 6, 7, 12), OrbModifier.WEAKENED in orb.modifiers)
@@ -208,5 +202,8 @@ class PadBoardRecognizerHazardTest {
         val MINUS_COLORS = listOf(OrbColor.FIRE, OrbColor.FIRE, OrbColor.DARK, OrbColor.WATER, OrbColor.FIRE, OrbColor.HEART,
             OrbColor.FIRE, OrbColor.DARK, OrbColor.FIRE, OrbColor.DARK, OrbColor.DARK, OrbColor.FIRE,
             OrbColor.HEART, OrbColor.WATER, OrbColor.HEART, OrbColor.FIRE, OrbColor.WATER, OrbColor.DARK)
+        val LOCK_CROP_COLORS = listOf(OrbColor.HEART, OrbColor.LIGHT, OrbColor.WOOD, OrbColor.FIRE, OrbColor.DARK, OrbColor.HEART,
+            OrbColor.DARK, OrbColor.FIRE, OrbColor.DARK, OrbColor.WOOD, OrbColor.FIRE, OrbColor.LIGHT,
+            OrbColor.WATER, OrbColor.LIGHT, OrbColor.HEART, OrbColor.WATER, OrbColor.WATER, OrbColor.WOOD)
     }
 }

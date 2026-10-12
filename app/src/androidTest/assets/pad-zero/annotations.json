@@ -1,0 +1,83 @@
+[
+  {
+    "file": "1000013015.jpg",
+    "columns": 6,
+    "rows": 5,
+    "bounds": [
+      10,
+      810,
+      563,
+      1270
+    ],
+    "columnCenters": [
+      56,
+      148.2,
+      240.4,
+      332.6,
+      424.8,
+      517
+    ],
+    "rowCenters": [
+      856,
+      948,
+      1040,
+      1132,
+      1224
+    ],
+    "colors": "LLHWWLFLDGFHLDFGHLHLLHGLFHGLHG",
+    "comboBonus": [
+      7
+    ]
+  },
+  {
+    "file": "1000013017.jpg",
+    "columns": 6,
+    "rows": 5,
+    "bounds": [
+      10,
+      810,
+      563,
+      1270
+    ],
+    "columnCenters": [
+      56,
+      148.2,
+      240.4,
+      332.6,
+      424.8,
+      517
+    ],
+    "rowCenters": [
+      856,
+      948,
+      1040,
+      1132,
+      1224
+    ],
+    "colors": "LJJHWFDWWLWWLLWDJLWFLWDDDGJDGF",
+    "comboBonus": [
+      11,
+      23
+    ]
+  },
+  {
+    "file": "1000013021.jpg",
+    "columns": 6,
+    "rows": 5,
+    "bounds": [10, 810, 563, 1270],
+    "columnCenters": [56, 148.2, 240.4, 332.6, 424.8, 517],
+    "rowCenters": [856, 948, 1040, 1132, 1224],
+    "colors": "GLGHGLHLHHLGGLGGJHHHHHLGHLLLGG",
+    "comboBonus": [14]
+  },
+  {
+    "file": "1000013023.jpg",
+    "columns": 6,
+    "rows": 5,
+    "bounds": [10, 810, 563, 1270],
+    "columnCenters": [56, 148.2, 240.4, 332.6, 424.8, 517],
+    "rowCenters": [856, 948, 1040, 1132, 1224],
+    "colors": "WWGLFLGGHFWHHGFDDFWFWGHWLFGLDH",
+    "comboBonus": [12, 19, 28]
+  }
+]

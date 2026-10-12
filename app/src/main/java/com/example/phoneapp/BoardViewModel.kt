@@ -14,7 +14,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.capture.BoardImageLoader
-import com.example.phoneapp.capture.PadBoardRecognizer
+import com.example.phoneapp.capture.BoardRecognizer
+import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.BoardSolver
@@ -48,6 +49,7 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadImage(decodeBitmap: () -> android.graphics.Bitmap?) {
+        val game = solveSettings.game
         solveJob?.cancel()
         boardLoadJob?.cancel()
         isSolving = false
@@ -63,7 +65,7 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         try {
                             withContext(Dispatchers.Default) {
-                                PadBoardRecognizer().recognize(bitmap)
+                                BoardRecognizer.forGame(game).recognize(bitmap)
                             }
                         } finally {
                             bitmap.recycle()
@@ -121,12 +123,21 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateSolveSettings(settings: SolveSettings) {
-        solveSettings = settings
+        applySettings(settings)
         settingsStore.save(settings)
     }
 
     fun refreshSettings() {
-        solveSettings = settingsStore.load()
+        applySettings(settingsStore.load())
+    }
+
+    private fun applySettings(settings: SolveSettings) {
+        if (settings.game != solveSettings.game) {
+            reset()
+            // A single-app sharing session may still point at the previous game.
+            getApplication<Application>().stopService(Intent(getApplication(), ScreenCaptureService::class.java))
+        }
+        solveSettings = settings
     }
 
     fun cancelSolve() {
