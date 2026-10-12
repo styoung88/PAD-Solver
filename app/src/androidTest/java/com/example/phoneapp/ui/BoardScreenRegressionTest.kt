@@ -22,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.test.espresso.Espresso.pressBack
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardAnalyzer
@@ -144,7 +145,13 @@ class BoardScreenRegressionTest {
             }
         }
         compose.onNodeWithText("4 combos").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("1 match + 3 bonus combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("1 match +3 bonus").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Show combo breakdown").performClick()
+        compose.onNodeWithText("1 match +3 bonus").assertIsDisplayed()
+        compose.onNodeWithText("Combo breakdown").assertDoesNotExist()
+        compose.onNodeWithText("Close").assertDoesNotExist()
+        pressBack()
+        compose.onNodeWithText("1 match +3 bonus").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD 0").performScrollTo().assertIsDisplayed()
     }
 
@@ -158,6 +165,7 @@ class BoardScreenRegressionTest {
             SolutionScreen(recognized, solution, false, {}, {}, {}, game = com.example.phoneapp.game.GameVariant.PAD_ZERO)
         } }
         compose.onNodeWithText("5 combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Show combo breakdown").assertDoesNotExist()
         compose.onNodeWithText("Team ATK ×25").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Damage reduction: 50%").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Bonus attack: 10 damage").performScrollTo().assertIsDisplayed()
@@ -217,10 +225,10 @@ class BoardScreenRegressionTest {
         compose.setContent { MaterialTheme { SolutionScreen(recognized.copy(board = board), solution, false, {}, {}, {}) } }
         compose.onNodeWithText("No solution for these settings").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("3 combos").assertDoesNotExist()
-        compose.onNodeWithText("Orb moves").assertDoesNotExist()
+        compose.onNodeWithText("Moves").assertDoesNotExist()
         compose.onNodeWithText("Cascades").assertDoesNotExist()
-        compose.onNodeWithText("Light combos").assertDoesNotExist()
-        compose.onNodeWithText("0 L shape matches").assertDoesNotExist()
+        compose.onNodeWithText("Light").assertDoesNotExist()
+        compose.onNodeWithText("L shape").assertDoesNotExist()
         compose.onNodeWithText("The captured board does not have enough orbs or space to meet the selected requirements. Adjust settings to try again.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Show route in PAD").assertDoesNotExist()

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,6 +39,8 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
@@ -54,6 +57,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import com.example.phoneapp.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -62,6 +67,9 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.launch
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardSize
@@ -426,6 +434,7 @@ fun SolutionScreen(
     val preferredColorComboCount = solution.preferredColor?.let { color ->
         solution.predictedMatches.allMatches.count { it.color == color }
     }
+    var showComboBreakdown by remember(solution) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars),
         horizontalAlignment = Alignment.CenterHorizontally) {
         Column(
@@ -443,37 +452,68 @@ fun SolutionScreen(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        Text(resultTitle, style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        BoxWithConstraints(Modifier.weight(1f)) {
+                            val headingStyle = if (maxWidth < 180.dp) MaterialTheme.typography.titleLarge
+                                else MaterialTheme.typography.headlineMedium
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text(resultTitle, style = headingStyle,
+                                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
+                                if (solution.requirementsPossible && solution.predictedMatches.bonusComboCount > 0) {
+                                    Box {
+                                        IconButton(onClick = { showComboBreakdown = true }, modifier = Modifier.size(24.dp)) {
+                                            Icon(painterResource(R.drawable.ic_info), contentDescription = "Show combo breakdown",
+                                                modifier = Modifier.size(18.dp))
+                                        }
+                                        if (showComboBreakdown) {
+                                            val matches = solution.predictedMatches.physicalComboCount
+                                            val bonuses = solution.predictedMatches.bonusComboCount
+                                            val tooltipOffset = with(LocalDensity.current) { 32.dp.roundToPx() }
+                                            Popup(
+                                                alignment = Alignment.TopCenter,
+                                                offset = IntOffset(0, tooltipOffset),
+                                                onDismissRequest = { showComboBreakdown = false },
+                                                properties = PopupProperties(focusable = true),
+                                            ) {
+                                                Surface(shape = MaterialTheme.shapes.extraSmall,
+                                                    color = MaterialTheme.colorScheme.inverseSurface,
+                                                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                                                    shadowElevation = 4.dp) {
+                                                    Text("$matches ${if (matches == 1) "match" else "matches"} +$bonuses bonus",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         solution.teamSkillEvaluation?.let { team ->
                             Text(team.attackSummary, style = MaterialTheme.typography.titleMedium,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.End)
                         }
                     }
-                    if (solution.predictedMatches.bonusComboCount > 0) {
-                        val matches = solution.predictedMatches.physicalComboCount
-                        val bonuses = solution.predictedMatches.bonusComboCount
-                        Text("$matches ${if (matches == 1) "match" else "matches"} + $bonuses bonus ${if (bonuses == 1) "combo" else "combos"}",
-                            style = MaterialTheme.typography.bodyMedium)
+                    val damageReduction = solution.teamSkillEvaluation?.damageReductionSummary
+                    damageReduction?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium)
                     }
                     if (solution.requirementsPossible) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            RouteStat("${solution.orbMoves}", "Orb moves", Modifier.weight(1f))
+                            RouteStat("${solution.orbMoves}", "Moves",
+                                Modifier.weight(1f).wrapContentWidth(Alignment.Start))
                             RouteStat("${solution.predictedMatches.cascadeCount}", "Cascades", Modifier.weight(1f))
                             if (solution.preferredColor != null && preferredColorComboCount != null) {
-                                RouteStat("$preferredColorComboCount", "${orbColorName(solution.preferredColor)} " +
-                                    if (game == GameVariant.PAD_ZERO) "matches" else "combos", Modifier.weight(1f))
+                                RouteStat("$preferredColorComboCount", orbColorName(solution.preferredColor), Modifier.weight(1f))
                             }
-                        }
-                        solution.matchPatternFocus?.let {
-                            Text("${solution.focusedPatternMatchCount ?: 0} ${it.displayName} matches",
-                                style = MaterialTheme.typography.bodyMedium)
+                            solution.matchPatternFocus?.let {
+                                RouteStat("${solution.focusedPatternMatchCount ?: 0}", it.displayName, Modifier.weight(1f))
+                            }
                         }
                     }
                     SolveSettingsSummary(solution.preferredColor, solution.targetComboCount, solution.matchPatternFocus,
                         solution.teamSkillEvaluation?.skill)
                     solution.teamSkillEvaluation?.let { team ->
-                        team.damageReductionSummary?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         if (team.bonusAttackDamage > 0) {
                             Text("Bonus attack: ${team.bonusAttackDamage} damage", style = MaterialTheme.typography.bodyMedium)
                         }
@@ -613,10 +653,10 @@ private fun RouteStat(value: String, label: String, modifier: Modifier) {
 @Composable
 private fun SolveSettingsSummary(color: OrbColor?, target: Int?, pattern: MatchPattern?, teamSkill: PadZeroTeamSkill? = null) {
     val summary = listOfNotNull(
-        color?.let { "${orbColorName(it)} focus" } ?: "Any color",
-        target?.let { "Minimum $it combos" },
+        color?.let { orbColorName(it) } ?: "Any color",
+        target?.let { "$it combos" },
         pattern?.displayName,
-        teamSkill?.takeIf { it != PadZeroTeamSkill.NONE }?.let { "Team skill: ${it.displayName}" },
+        teamSkill?.takeIf { it != PadZeroTeamSkill.NONE }?.displayName,
     ).joinToString(" · ")
     Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

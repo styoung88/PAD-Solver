@@ -55,11 +55,14 @@ data class BoardSolution(
     val comboCount: Int get() = predictedMatches.comboCount
     val orbMoves: Int get() = (path.size - 1).coerceAtLeast(0)
     val routeSummary: String get() = buildList {
-        add("$comboCount combos" + if (predictedMatches.bonusComboCount > 0)
-            " · +${predictedMatches.bonusComboCount} bonus" else "")
+        add("${comboCount}c")
         teamSkillEvaluation?.let { team ->
-            add(team.attackSummary)
-            team.damageReductionSummary?.let(::add)
+            add("ATK ×${team.attackMultiplier}")
+            if (team.skill.reductionPercent > 0) add("${team.damageReductionPercent}% DR")
+        }
+    }.joinToString(" · ")
+    val routeDetails: String get() = buildList {
+        teamSkillEvaluation?.let { team ->
             if (team.bonusAttackDamage > 0) add("Bonus attack: ${team.bonusAttackDamage} damage")
         }
     }.joinToString("\n")

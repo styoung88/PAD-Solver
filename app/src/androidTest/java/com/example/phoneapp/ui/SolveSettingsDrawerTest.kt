@@ -70,11 +70,11 @@ class SolveSettingsDrawerTest {
         waitForText("Show route in PAD")
         compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
-        compose.onNodeWithText("Wood").performScrollTo().assertIsDisplayed()
+        compose.onNode(hasText("Wood") and hasText("Optimize color damage for")).performScrollTo().assertIsDisplayed()
         selectChoice("Optimize color damage for", "Fire")
         compose.onNodeWithText("Apply and recalculate").performClick()
-        waitForText("Fire combos")
-        compose.onNodeWithText("Wood combos").assertDoesNotExist()
+        waitForText("Fire", excludeFieldLabel = "Optimize color damage for")
+        compose.onNodeWithText("Wood").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD").performScrollTo().assertIsDisplayed()
     }
 
@@ -255,11 +255,13 @@ class SolveSettingsDrawerTest {
         }
     }
 
-    private fun waitForText(text: String) {
+    private fun waitForText(text: String, excludeFieldLabel: String? = null) {
+        val selector = if (excludeFieldLabel == null) hasText(text)
+            else hasText(text) and !hasText(excludeFieldLabel)
         compose.waitUntil(timeoutMillis = 30_000) {
-            compose.onAllNodesWithText(text).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+            compose.onAllNodes(selector).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        val node = compose.onNodeWithText(text)
+        val node = compose.onNode(selector)
         if (text !in setOf("Board not clear enough", "Apply and solve")) node.performScrollTo()
         node.assertIsDisplayed()
     }

@@ -13,7 +13,7 @@ enum class MatchPattern(val displayName: String, private val minimumOrbs: Int) {
     TPA("TPA", 4),
     L_SHAPE("L shape", 5),
     CROSS("Cross", 5),
-    VDP("VDP (3×3 square)", 9);
+    VDP("VDP", 9);
 
     fun countMatches(analysis: BoardAnalysis, color: OrbColor? = null): Int =
         analysis.allMatches.sumOf { match ->
