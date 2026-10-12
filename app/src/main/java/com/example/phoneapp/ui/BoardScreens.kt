@@ -3,7 +3,6 @@ package com.example.phoneapp.ui
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -58,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -226,15 +224,13 @@ fun BoardPreviewScreen(
                         .padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    SolverAppBar(onOpenSettings, enabled = true, game = settings.game)
+                    SolverAppBar(onOpenSettings, enabled = true)
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Board captured", style = MaterialTheme.typography.titleLarge)
                             Text("Check the detected orbs below, then choose your solve settings.")
-                            SolveSettingsSummary(settings.preferredColor, settings.targetComboCount, settings.matchPatternFocus)
-                            if (settings.game == GameVariant.PAD_ZERO && settings.padZeroTeamSkill != PadZeroTeamSkill.NONE) {
-                                Text("Team skill: ${settings.padZeroTeamSkill.displayName}", style = MaterialTheme.typography.bodySmall)
-                            }
+                            SolveSettingsSummary(settings.preferredColor, settings.targetComboCount, settings.matchPatternFocus,
+                                settings.padZeroTeamSkill.takeIf { settings.game == GameVariant.PAD_ZERO })
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -265,7 +261,6 @@ fun SolveSettingsDrawer(
     content: @Composable (openSettings: () -> Unit) -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    var advancedExpanded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(openRequested) {
         if (openRequested) {
@@ -339,50 +334,37 @@ fun SolveSettingsDrawer(
                         }
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth()
-                                        .clickable(role = Role.Button) { advancedExpanded = !advancedExpanded }
-                                        .semantics {
-                                            stateDescription = if (advancedExpanded) "Expanded" else "Collapsed"
-                                        },
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text("Advanced settings", style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.weight(1f))
-                                    Text(if (advancedExpanded) "−" else "+")
+                                Text("Advanced settings", style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(8.dp))
+                                ChoiceDropdown(
+                                    selectedValue = settings.orbMovement,
+                                    choices = OrbMovement.entries.map { it to it.displayName },
+                                    label = "Orb movement count",
+                                    enabled = !isSolving,
+                                    onSelected = { value -> value?.let { onSettingsChanged(settings.copy(orbMovement = it)) } },
+                                )
+                                if (board != null) Text(
+                                    "Up to ${settings.toOptions(board).maxOrbMoves} moves.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (settings.orbMovement == OrbMovement.HIGH) {
+                                    Text("More orb moves can make the route harder to read and increase solve time.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                                 }
-                                if (advancedExpanded) {
-                                    Spacer(Modifier.height(8.dp))
-                                    ChoiceDropdown(
-                                        selectedValue = settings.orbMovement,
-                                        choices = OrbMovement.entries.map { it to it.displayName },
-                                        label = "Orb movement count",
-                                        enabled = !isSolving,
-                                        onSelected = { value -> value?.let { onSettingsChanged(settings.copy(orbMovement = it)) } },
-                                    )
-                                    if (board != null) Text(
-                                        "Up to ${settings.toOptions(board).maxOrbMoves} moves.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    if (settings.orbMovement == OrbMovement.HIGH) {
-                                        Text("More orb moves can make the route harder to read and increase solve time.",
-                                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                    }
-                                    Spacer(Modifier.height(16.dp))
-                                    ChoiceDropdown(
-                                        selectedValue = settings.searchComplexity,
-                                        choices = SearchComplexity.entries.map { it to it.displayName },
-                                        label = "Search complexity",
-                                        enabled = !isSolving,
-                                        onSelected = { value -> value?.let { onSettingsChanged(settings.copy(searchComplexity = it)) } },
-                                    )
-                                    Text("A more complex search explores more routes.",
-                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (settings.searchComplexity == SearchComplexity.HIGH || settings.searchComplexity == SearchComplexity.VERY_HIGH) {
-                                        Text("Increasing search complexity can increase solve time. Better results are not guaranteed.",
-                                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                    }
+                                Spacer(Modifier.height(16.dp))
+                                ChoiceDropdown(
+                                    selectedValue = settings.searchComplexity,
+                                    choices = SearchComplexity.entries.map { it to it.displayName },
+                                    label = "Search complexity",
+                                    enabled = !isSolving,
+                                    onSelected = { value -> value?.let { onSettingsChanged(settings.copy(searchComplexity = it)) } },
+                                )
+                                Text("A more complex search explores more routes.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (settings.searchComplexity == SearchComplexity.HIGH || settings.searchComplexity == SearchComplexity.VERY_HIGH) {
+                                    Text("Increasing search complexity can increase solve time. Better results are not guaranteed.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
@@ -451,7 +433,7 @@ fun SolutionScreen(
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SolverAppBar(onOpenSettings, enabled = true, game = game)
+            SolverAppBar(onOpenSettings, enabled = true)
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val resultTitle = when {
@@ -546,17 +528,13 @@ fun SolutionScreen(
 }
 
 @Composable
-private fun SolverAppBar(onSettings: () -> Unit, enabled: Boolean, game: GameVariant? = null) {
-    Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("PAD Solver", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            IconButton(onClick = onSettings, enabled = enabled,
-                modifier = Modifier.semantics { contentDescription = "Open solve settings" }) {
-                Text("⚙", style = MaterialTheme.typography.headlineSmall)
-            }
+private fun SolverAppBar(onSettings: () -> Unit, enabled: Boolean) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text("PAD Solver", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        IconButton(onClick = onSettings, enabled = enabled,
+            modifier = Modifier.semantics { contentDescription = "Open solve settings" }) {
+            Text("⚙", style = MaterialTheme.typography.headlineSmall)
         }
-        if (game != null) Text("Game: ${game.displayName}", style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

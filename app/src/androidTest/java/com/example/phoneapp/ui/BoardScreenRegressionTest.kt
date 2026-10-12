@@ -84,7 +84,7 @@ class BoardScreenRegressionTest {
         compose.onNodeWithText("+1 badges add combos when matched.").assertDoesNotExist()
         compose.onNodeWithText("Apply and solve").assertIsDisplayed()
         compose.onNodeWithText("Close").assertIsDisplayed()
-        compose.onNodeWithText("Advanced settings").performScrollTo().performClick()
+        compose.onNodeWithText("Advanced settings").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Search complexity").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Apply and solve").assertIsDisplayed()
         compose.onNodeWithText("Close").assertIsDisplayed()

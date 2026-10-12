@@ -56,6 +56,27 @@ class SolveSettingsTest {
     }
 
     @Test
+    fun comboMinimumTakesPriorityOverDamageThenDamageRanksQualifyingResults() {
+        val goal = SolveSettings(OrbColor.FIRE, targetComboCount = 3).toGoal()
+        val belowMinimum = goal.evaluate(BoardAnalysis(listOf(match(OrbColor.FIRE, 12), match(OrbColor.WOOD, 3))))
+        val meetsMinimum = goal.evaluate(BoardAnalysis(listOf(
+            match(OrbColor.FIRE, 3), match(OrbColor.WOOD, 3), match(OrbColor.WATER, 3),
+        )))
+        val higherDamage = goal.evaluate(BoardAnalysis(listOf(
+            match(OrbColor.FIRE, 12), match(OrbColor.WOOD, 3), match(OrbColor.WATER, 3),
+        )))
+        val extraCombos = goal.evaluate(BoardAnalysis(listOf(
+            match(OrbColor.FIRE, 3), match(OrbColor.WOOD, 3), match(OrbColor.WATER, 3), match(OrbColor.HEART, 3),
+        )))
+        assertFalse(belowMinimum.satisfied)
+        assertTrue(meetsMinimum.satisfied)
+        assertTrue(belowMinimum.primaryScore > meetsMinimum.primaryScore)
+        assertTrue(meetsMinimum > belowMinimum)
+        assertTrue(extraCombos.satisfied)
+        assertTrue(higherDamage > extraCombos)
+    }
+
+    @Test
     fun onlyAttackingColorsAndPositiveTargetsAreValidSettings() {
         for (color in listOf(OrbColor.FIRE, OrbColor.WATER, OrbColor.WOOD, OrbColor.LIGHT, OrbColor.DARK)) {
             assertEquals(color, SolveSettings(color, 6).toGoal().preferredColor)

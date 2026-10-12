@@ -123,7 +123,7 @@ class SolveSettingsDrawerTest {
         compose.onNodeWithText("Team ATK ×10").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Damage reduction: 50%").performScrollTo().assertIsDisplayed()
         exportScreenshot("pad-zero-solution.png")
-        compose.onNodeWithText("Game: PAD 0").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Game: PAD 0").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
         compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         selectChoice("Game", "PAD")
