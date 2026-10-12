@@ -28,6 +28,7 @@ internal class OverlayControlsView(
     private var positionLocked = initiallyLocked
     private val accent = 0xFF66DFCA.toInt()
     private val status: TextView
+    private val details: TextView
     private val capture: View
     private val settings: TextView
     private val panelPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -113,15 +114,12 @@ internal class OverlayControlsView(
         actions.addView(capture, LayoutParams(0, resources.dpToPx(44), 1f).apply { marginEnd = resources.dpToPx(8) })
         actions.addView(settings, LayoutParams(0, resources.dpToPx(44), 1f))
         addView(actions, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = resources.dpToPx(6) })
-        status = TextView(context).apply {
-            textSize = 13f
-            setTextColor(0xFFF1F5F9.toInt())
-            setShadowLayer(resources.dpToPx(1).toFloat(), 0f, resources.dpToPx(1).toFloat(), 0xCC000000.toInt())
-            maxLines = 5
-            accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
-        }
+        status = statusLabel()
         addView(status, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = resources.dpToPx(8) })
+        details = statusLabel()
+        addView(details, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = resources.dpToPx(4) })
         status.visibility = GONE
+        details.visibility = GONE
         layoutParams = LayoutParams(resources.dpToPx(176), LayoutParams.WRAP_CONTENT)
         minimumWidth = resources.dpToPx(176)
     }
@@ -129,11 +127,33 @@ internal class OverlayControlsView(
     fun setStatus(message: String, isError: Boolean = false, busy: Boolean = false) {
         status.text = message
         status.visibility = if (message.isBlank()) GONE else VISIBLE
+        status.setSingleLine(false)
+        status.maxLines = 5
+        status.setAutoSizeTextTypeWithDefaults(TextView.AUTO_SIZE_TEXT_TYPE_NONE)
+        status.textSize = 13f
+        details.visibility = GONE
         status.setTextColor(if (isError) 0xFFFF8585.toInt() else 0xFFF1F5F9.toInt())
         capture.isEnabled = !busy
         capture.alpha = if (busy) 0.45f else 1f
         settings.isEnabled = true
         settings.alpha = 1f
+    }
+
+    fun setResult(summary: String, description: String) {
+        setStatus(summary)
+        status.setSingleLine(true)
+        status.setHorizontallyScrolling(false)
+        status.setAutoSizeTextTypeUniformWithConfiguration(9, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        details.text = description
+        details.visibility = if (description.isBlank()) GONE else VISIBLE
+    }
+
+    private fun statusLabel() = TextView(context).apply {
+        textSize = 13f
+        setTextColor(0xFFF1F5F9.toInt())
+        setShadowLayer(resources.dpToPx(1).toFloat(), 0f, resources.dpToPx(1).toFloat(), 0xCC000000.toInt())
+        maxLines = 5
+        accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
     }
 
     override fun dispatchDraw(canvas: android.graphics.Canvas) {

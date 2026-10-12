@@ -173,7 +173,7 @@ class SolutionOverlayService : Service() {
                 if (result.goalSatisfied) {
                     showRoute(recognized.boardBounds, result.path.map(recognized.board::indexOf).toIntArray(),
                         recognized.captureWidth, recognized.captureHeight, recognized.board.columns, recognized.board.rows)
-                    toolbarView?.setStatus(result.routeSummary)
+                    toolbarView?.setResult(result.routeSummary, result.routeDetails)
                 } else {
                     toolbarView?.setStatus("No matching route. Adjust your settings.", isError = true)
                 }
@@ -261,14 +261,11 @@ class SolutionOverlayService : Service() {
         }
         showRoute(bounds, positions, captureWidth, captureHeight, columns, rows)
         if (intent.hasExtra(EXTRA_COMBO_COUNT)) {
-            toolbarView?.setStatus(intent.getStringExtra(EXTRA_ROUTE_SUMMARY)
-                ?: comboStatus(intent.getIntExtra(EXTRA_COMBO_COUNT, 0), intent.getIntExtra(EXTRA_BONUS_COMBO_COUNT, 0)))
+            toolbarView?.setResult(intent.getStringExtra(EXTRA_ROUTE_SUMMARY) ?: "${intent.getIntExtra(EXTRA_COMBO_COUNT, 0)}c",
+                intent.getStringExtra(EXTRA_ROUTE_DETAILS).orEmpty())
         }
         return START_NOT_STICKY
     }
-
-    private fun comboStatus(total: Int, bonus: Int): String =
-        "$total combos" + if (bonus > 0) " · +$bonus bonus" else ""
 
     private fun showRoute(bounds: RectF, positions: IntArray, captureWidth: Int, captureHeight: Int, columns: Int, rows: Int) {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -441,8 +438,8 @@ class SolutionOverlayService : Service() {
 
     companion object {
         const val EXTRA_COMBO_COUNT = "combo_count"
-        const val EXTRA_BONUS_COMBO_COUNT = "bonus_combo_count"
         const val EXTRA_ROUTE_SUMMARY = "route_summary"
+        const val EXTRA_ROUTE_DETAILS = "route_details"
         const val EXTRA_GAME_VARIANT = "game_variant"
         @Volatile var enabled = false
             private set

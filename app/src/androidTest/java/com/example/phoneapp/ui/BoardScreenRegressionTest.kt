@@ -22,6 +22,10 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import com.example.phoneapp.awaitNativeObject
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.BoardAnalyzer
@@ -63,6 +67,34 @@ class BoardScreenRegressionTest {
             }
             compose.onNodeWithText("Check the detected ${size.displayName} layout").assertIsDisplayed()
         }
+    }
+
+    @Test
+    fun longPadZeroSettingsKeepActionsVisibleWhileScrolling() {
+        val settings = mutableStateOf(SolveSettings(
+            game = com.example.phoneapp.game.GameVariant.PAD_ZERO,
+            padZeroTeamSkill = PadZeroTeamSkill.MULTICOLOR,
+        ))
+        var applied = 0
+        compose.setContent { MaterialTheme {
+            Box(Modifier.height(480.dp)) {
+                SolveSettingsDrawer(settings.value, false, { settings.value = it },
+                    "Apply and solve", { applied++ }, board = recognized.board) { open ->
+                    Button(onClick = open) { Text("Open drawer") }
+                }
+            }
+        } }
+        compose.onNodeWithText("Open drawer").performClick()
+        compose.onNodeWithText("+1 badges add combos when matched.").assertDoesNotExist()
+        compose.onNodeWithText("Apply and solve").assertIsDisplayed()
+        compose.onNodeWithText("Close").assertIsDisplayed()
+        compose.onNodeWithText("Advanced settings").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Search complexity").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Apply and solve").assertIsDisplayed()
+        compose.onNodeWithText("Close").assertIsDisplayed()
+        compose.onNodeWithText("Team skill").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Apply and solve").performClick()
+        compose.runOnIdle { assertEquals(1, applied) }
     }
 
     @Test
@@ -116,7 +148,15 @@ class BoardScreenRegressionTest {
             }
         }
         compose.onNodeWithText("4 combos").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("1 match + 3 bonus combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("1 match +3 bonus").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Show combo breakdown").performClick()
+        compose.onNodeWithText("1 match +3 bonus").assertIsDisplayed()
+        compose.onNodeWithText("Combo breakdown").assertDoesNotExist()
+        compose.onNodeWithText("Close").assertDoesNotExist()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        checkNotNull(device.awaitNativeObject(By.text("1 match +3 bonus"), 10_000))
+        device.pressBack()
+        compose.onNodeWithText("1 match +3 bonus").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD 0").performScrollTo().assertIsDisplayed()
     }
 
@@ -130,6 +170,7 @@ class BoardScreenRegressionTest {
             SolutionScreen(recognized, solution, false, {}, {}, {}, game = com.example.phoneapp.game.GameVariant.PAD_ZERO)
         } }
         compose.onNodeWithText("5 combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Show combo breakdown").assertDoesNotExist()
         compose.onNodeWithText("Team ATK ×25").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Damage reduction: 50%").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Bonus attack: 10 damage").performScrollTo().assertIsDisplayed()
@@ -189,10 +230,10 @@ class BoardScreenRegressionTest {
         compose.setContent { MaterialTheme { SolutionScreen(recognized.copy(board = board), solution, false, {}, {}, {}) } }
         compose.onNodeWithText("No solution for these settings").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("3 combos").assertDoesNotExist()
-        compose.onNodeWithText("Orb moves").assertDoesNotExist()
+        compose.onNodeWithText("Moves").assertDoesNotExist()
         compose.onNodeWithText("Cascades").assertDoesNotExist()
-        compose.onNodeWithText("Light combos").assertDoesNotExist()
-        compose.onNodeWithText("0 L shape matches").assertDoesNotExist()
+        compose.onNodeWithText("Light").assertDoesNotExist()
+        compose.onNodeWithText("L shape").assertDoesNotExist()
         compose.onNodeWithText("The captured board does not have enough orbs or space to meet the selected requirements. Adjust settings to try again.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
@@ -247,8 +288,8 @@ class BoardScreenRegressionTest {
         compose.onNodeWithText("Board size").assertDoesNotExist()
         compose.onNodeWithText("Path style").assertDoesNotExist()
         compose.onNodeWithText("Route appearance").assertDoesNotExist()
-        compose.onNodeWithText("Close").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Apply and solve").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Close").assertIsDisplayed()
+        compose.onNodeWithText("Apply and solve").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, applies) }
     }
 }

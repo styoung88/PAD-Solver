@@ -325,8 +325,8 @@ class MainActivity : ComponentActivity() {
             putExtra(SolutionOverlayService.EXTRA_BOARD_ROWS, recognized.board.rows)
             putExtra(SolutionOverlayService.EXTRA_PATH, result.path.map(recognized.board::indexOf).toIntArray())
             putExtra(SolutionOverlayService.EXTRA_COMBO_COUNT, result.comboCount)
-            putExtra(SolutionOverlayService.EXTRA_BONUS_COMBO_COUNT, result.predictedMatches.bonusComboCount)
             putExtra(SolutionOverlayService.EXTRA_ROUTE_SUMMARY, result.routeSummary)
+            putExtra(SolutionOverlayService.EXTRA_ROUTE_DETAILS, result.routeDetails)
             putExtra(SolutionOverlayService.EXTRA_GAME_VARIANT, solveSettings.game.name)
         }
         ContextCompat.startForegroundService(this, overlayIntent)

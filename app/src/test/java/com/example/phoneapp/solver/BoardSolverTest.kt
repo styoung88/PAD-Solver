@@ -180,6 +180,27 @@ class BoardSolverTest {
     }
 
     @Test
+    fun selectedComboMinimumWinsOverAHigherDamageRoute() = runBlocking {
+        val input = Board(6, 2, ("FFFFFF" + "WWWHHH").mapIndexed { index, code -> Orb(when (code) {
+            'F' -> OrbColor.FIRE
+            'W' -> OrbColor.WATER
+            else -> OrbColor.HEART
+        }, if (index == 4) setOf(OrbModifier.WEAKENED) else emptySet()) })
+        val unconstrainedOptions = SolveOptions(1, 64, SolveSettings(OrbColor.FIRE).toGoal())
+        val constrainedOptions = unconstrainedOptions.copy(goal = SolveSettings(OrbColor.FIRE, 3).toGoal())
+        val unconstrained = BoardSolver().solve(input, unconstrainedOptions)
+        val constrained = BoardSolver().solve(input, constrainedOptions)
+        assertValidSolution(input, unconstrainedOptions, unconstrained)
+        assertValidSolution(input, constrainedOptions, constrained)
+        assertEquals(2, unconstrained.comboCount)
+        assertEquals(3, constrained.comboCount)
+        assertTrue(constrained.goalSatisfied)
+        assertEquals(true, constrained.comboMinimumSatisfied)
+        assertTrue(ColorDamageEstimate.scoreRelativeDamage(unconstrained.predictedMatches, OrbColor.FIRE) >
+            ColorDamageEstimate.scoreRelativeDamage(constrained.predictedMatches, OrbColor.FIRE))
+    }
+
+    @Test
     fun cancellingAnActiveSearchPropagatesCancellation() = runBlocking {
         // Cancel from the first evaluation, so this tests an active search
         // without depending on machine speed or a wall-clock delay.
