@@ -30,14 +30,17 @@ class BoardViewModelLifecycleTest {
                     model.updateSolveSettings(SolveSettings())
                     model.loadCapture(file.absolutePath)
                 }
-                val deadline = System.nanoTime() + 10_000_000_000L
+                val deadline = System.nanoTime() + 60_000_000_000L
                 var reading = true
                 while (reading && System.nanoTime() < deadline) {
                     instrumentation.waitForIdleSync()
                     scenario.onActivity { reading = model.isReadingCapture }
+                    if (reading) Thread.sleep(20)
                 }
+                assertFalse("Board recognition must finish before testing game changes", reading)
                 scenario.onActivity {
-                    assertTrue(model.recognition is BoardRecognition.Recognized)
+                    assertTrue("Unexpected recognition result: ${model.recognition}",
+                        model.recognition is BoardRecognition.Recognized)
                     model.solveBoard()
                     assertTrue(model.isSolving)
                     model.updateSolveSettings(SolveSettings(game = GameVariant.PAD_ZERO))

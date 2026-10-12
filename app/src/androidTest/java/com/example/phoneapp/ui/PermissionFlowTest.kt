@@ -145,10 +145,12 @@ class PermissionFlowTest {
         }
         try {
             ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java).setData(Uri.fromFile(image))).use {
+                // Loading also offers settings; wait until recognition has produced the board.
+                awaitText("Board captured", scroll = false, clickable = false, timeoutMillis = 60_000)
                 awaitText("Solve settings").performClick()
                 awaitText("Apply and solve").performClick()
                 // Software rendering and shared CI CPUs need more time for the real solve.
-                awaitText("Show route in PAD", scroll = false, timeoutMillis = 60_000).performClick()
+                awaitText("Show route in PAD", timeoutMillis = 60_000).performClick()
                 assertNotNull(device.awaitNativeObject(By.desc("Capture board"), timeout))
                 assertTrue(SolutionOverlayService.enabled)
                 assertFalse(ScreenCaptureService.active)
