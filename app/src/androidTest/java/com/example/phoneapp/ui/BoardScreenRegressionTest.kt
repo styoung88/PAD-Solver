@@ -66,6 +66,34 @@ class BoardScreenRegressionTest {
     }
 
     @Test
+    fun longPadZeroSettingsKeepActionsVisibleWhileScrolling() {
+        val settings = mutableStateOf(SolveSettings(
+            game = com.example.phoneapp.game.GameVariant.PAD_ZERO,
+            padZeroTeamSkill = PadZeroTeamSkill.MULTICOLOR,
+        ))
+        var applied = 0
+        compose.setContent { MaterialTheme {
+            Box(Modifier.height(480.dp)) {
+                SolveSettingsDrawer(settings.value, false, { settings.value = it },
+                    "Apply and solve", { applied++ }, board = recognized.board) { open ->
+                    Button(onClick = open) { Text("Open drawer") }
+                }
+            }
+        } }
+        compose.onNodeWithText("Open drawer").performClick()
+        compose.onNodeWithText("+1 badges add combos when matched.").assertDoesNotExist()
+        compose.onNodeWithText("Apply and solve").assertIsDisplayed()
+        compose.onNodeWithText("Close").assertIsDisplayed()
+        compose.onNodeWithText("Advanced settings").performScrollTo().performClick()
+        compose.onNodeWithText("Search complexity").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Apply and solve").assertIsDisplayed()
+        compose.onNodeWithText("Close").assertIsDisplayed()
+        compose.onNodeWithText("Team skill").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Apply and solve").performClick()
+        compose.runOnIdle { assertEquals(1, applied) }
+    }
+
+    @Test
     fun smallBoardKeepsSavedTargetAndExplainsItsLimit() {
         val settings = mutableStateOf(SolveSettings(targetComboCount = 10))
         val small = Board(5, 4, List(20) { Orb(OrbColor.FIRE) })
@@ -247,8 +275,8 @@ class BoardScreenRegressionTest {
         compose.onNodeWithText("Board size").assertDoesNotExist()
         compose.onNodeWithText("Path style").assertDoesNotExist()
         compose.onNodeWithText("Route appearance").assertDoesNotExist()
-        compose.onNodeWithText("Close").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Apply and solve").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Close").assertIsDisplayed()
+        compose.onNodeWithText("Apply and solve").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, applies) }
     }
 }

@@ -65,14 +65,14 @@ class SolveSettingsDrawerTest {
         selectChoice("Minimum combos", "No minimum")
         selectChoice("Match pattern", "No pattern requirement")
         selectChoice("Optimize color damage for", "Wood")
-        compose.onNodeWithText("Apply and solve").performScrollTo().performClick()
+        compose.onNodeWithText("Apply and solve").performClick()
 
         waitForText("Show route in PAD")
         compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
         compose.onNodeWithText("Wood").performScrollTo().assertIsDisplayed()
         selectChoice("Optimize color damage for", "Fire")
-        compose.onNodeWithText("Apply and recalculate").performScrollTo().performClick()
+        compose.onNodeWithText("Apply and recalculate").performClick()
         waitForText("Fire combos")
         compose.onNodeWithText("Wood combos").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD").performScrollTo().assertIsDisplayed()
@@ -86,15 +86,16 @@ class SolveSettingsDrawerTest {
         waitForText("Apply and solve")
         selectChoice("Game", "PAD 0")
         assertEquals(GameVariant.PAD_ZERO, SolveSettingsStore(compose.activity).load().game)
-        compose.onNodeWithText("Done").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Close").performScrollTo().performClick()
-        compose.onNodeWithText("Game: PAD 0").assertIsDisplayed()
+        compose.onNodeWithText("Done").assertIsDisplayed()
+        compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithText("Game: PAD 0").assertDoesNotExist()
         compose.onNodeWithText("Board captured").assertDoesNotExist()
-        compose.onNodeWithText("Open PAD 0 overlay").assertIsDisplayed()
+        compose.onNodeWithText("Open PAD 0 overlay").performScrollTo().assertIsDisplayed()
         compose.activityRule.scenario.recreate()
         closeSettingsIfOpen()
-        compose.onNodeWithText("Game: PAD 0").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Open solve settings").performClick()
+        compose.onNodeWithText("Game: PAD 0").assertDoesNotExist()
+        compose.onNodeWithText("Open PAD 0 overlay").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         selectChoice("Game", "PAD")
         assertEquals(GameVariant.PAD, SolveSettingsStore(compose.activity).load().game)
     }
@@ -109,7 +110,7 @@ class SolveSettingsDrawerTest {
         loadCapture(openSettings = false, fixture = "pad-zero/1000013017.jpg")
         waitForText("Board captured")
         compose.onNodeWithText("Top-right +1 badges add one combo per marked orb cleared in a match.")
-            .performScrollTo().assertIsDisplayed()
+            .assertDoesNotExist()
         exportScreenshot("pad-zero-board-preview.png")
         compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         // The inventory bound includes the two marked orbs: 8 physical + 2 bonus.
@@ -117,7 +118,7 @@ class SolveSettingsDrawerTest {
         assertEquals(10, SolveSettingsStore(compose.activity).load().targetComboCount)
         selectChoice("Minimum combos", "No minimum")
         selectChoice("Team skill", "Expert Combo")
-        compose.onNodeWithText("Apply and solve").performScrollTo().performClick()
+        compose.onNodeWithText("Apply and solve").performClick()
         waitForText("Show route in PAD 0")
         compose.onNodeWithText("Team ATK ×10").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Damage reduction: 50%").performScrollTo().assertIsDisplayed()
@@ -126,8 +127,9 @@ class SolveSettingsDrawerTest {
         compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
         compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         selectChoice("Game", "PAD")
-        compose.onNodeWithText("Close").performScrollTo().performClick()
-        compose.onNodeWithText("Game: PAD").assertIsDisplayed()
+        compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithText("Game: PAD").assertDoesNotExist()
+        compose.onNodeWithText("Open PAD overlay").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Show route in PAD 0").assertDoesNotExist()
     }
 
@@ -143,7 +145,7 @@ class SolveSettingsDrawerTest {
         assertEquals(PadZeroTeamSkill.MULTICOLOR, saved.padZeroTeamSkill)
         assertEquals(OrbColor.attackingColors.toSet() - OrbColor.DARK, saved.teamAttackingAttributes)
         assertTrue(saved.requireDamageReduction)
-        compose.onNodeWithText("Close").performScrollTo().performClick()
+        compose.onNodeWithText("Close").performClick()
         compose.activityRule.scenario.recreate()
         closeSettingsIfOpen()
         compose.onNodeWithContentDescription("Open solve settings").performClick()
@@ -172,11 +174,11 @@ class SolveSettingsDrawerTest {
         loadCapture(openSettings = true)
         waitForText("Apply and solve")
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
-        compose.onNodeWithText("Close").performScrollTo().performClick()
+        compose.onNodeWithText("Close").performClick()
         compose.onNodeWithText("Board captured").assertIsDisplayed()
         compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
         compose.onAllNodesWithText("Minimum combos").assertCountEquals(1)
-        compose.onNodeWithText("Apply and solve").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Apply and solve").assertIsDisplayed()
     }
 
     @Test
@@ -190,7 +192,7 @@ class SolveSettingsDrawerTest {
         assertEquals(com.example.phoneapp.board.OrbColor.DARK, SolveSettingsStore(compose.activity).load().preferredColor)
         selectChoice("Match pattern", "Cross")
         assertEquals(com.example.phoneapp.board.OrbColor.DARK, SolveSettingsStore(compose.activity).load().preferredColor)
-        compose.onNodeWithText("Close").performScrollTo().performClick()
+        compose.onNodeWithText("Close").performClick()
         compose.activityRule.scenario.recreate()
         // The capture intent retains the overlay's request to open settings.
         waitForText("Apply and solve")
@@ -222,7 +224,7 @@ class SolveSettingsDrawerTest {
         waitForText("Apply and solve")
         selectChoice("Minimum combos", "No minimum")
         selectChoice("Match pattern", "No pattern requirement")
-        compose.onNodeWithText("Apply and solve").performScrollTo().performClick()
+        compose.onNodeWithText("Apply and solve").performClick()
         val missing = File(compose.activity.filesDir, "missing-capture.png")
         sendCapture(missing, openSettings = false)
         waitForText("Board not clear enough")
@@ -237,6 +239,7 @@ class SolveSettingsDrawerTest {
     }
 
     private fun exportScreenshot(name: String) {
+        compose.onNodeWithText("PAD Solver").performScrollTo()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         assertTrue(androidx.test.uiautomator.UiDevice.getInstance(instrumentation)
             .takeScreenshot(File(instrumentation.targetContext.getExternalFilesDir(null), name)))
@@ -245,10 +248,9 @@ class SolveSettingsDrawerTest {
     private fun closeSettingsIfOpen() {
         compose.waitForIdle()
         val close = compose.onNodeWithText("Close")
-        // The Close button may be below the viewport in the longer PAD 0 drawer.
-        // Use horizontal drawer visibility, then scroll the button into view.
+        // Check horizontal visibility because the drawer remains composed when closed.
         if (close.getUnclippedBoundsInRoot().right > 0.dp) {
-            close.performScrollTo().performClick()
+            close.performClick()
             compose.waitForIdle()
         }
     }
@@ -258,7 +260,7 @@ class SolveSettingsDrawerTest {
             compose.onAllNodesWithText(text).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         val node = compose.onNodeWithText(text)
-        if (text != "Board not clear enough") node.performScrollTo()
+        if (text !in setOf("Board not clear enough", "Apply and solve")) node.performScrollTo()
         node.assertIsDisplayed()
     }
 
