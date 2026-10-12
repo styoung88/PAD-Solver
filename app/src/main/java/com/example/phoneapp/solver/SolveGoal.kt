@@ -3,6 +3,7 @@ package com.example.phoneapp.solver
 import com.example.phoneapp.board.Board
 import com.example.phoneapp.board.BoardAnalysis
 import com.example.phoneapp.board.OrbColor
+import com.example.phoneapp.board.OrbModifier
 
 data class RequirementEvaluation(val actual: Int, val minimum: Int) {
     val satisfied: Boolean get() = actual >= minimum
@@ -55,7 +56,9 @@ data class ComboMinimum(val count: Int) : SolveRequirement {
 
 /** Inventory upper bound without skyfall; a route attaining it need not exist. */
 internal val Board.comboCapacity: Int get() = orbs.filter { it.color != OrbColor.UNKNOWN }
-    .groupingBy { it.color }.eachCount().values.sumOf { it / 3 }
+    .groupBy { it.color }.values.sumOf { group ->
+        group.size / 3 + if (group.size >= 3) group.count { OrbModifier.COMBO_BONUS in it.modifiers } else 0
+    }
 
 data class RequiredPattern(val pattern: MatchPattern, val color: OrbColor? = null) : SolveRequirement {
     init { require(color == null || color.isAttacking) }
@@ -76,6 +79,8 @@ fun interface SolveGoal {
     val matchPatternFocus: MatchPattern? get() = requirements.filterIsInstance<RequiredPattern>()
         .singleOrNull()?.pattern
     val targetComboCount: Int? get() = requirements.filterIsInstance<ComboMinimum>().singleOrNull()?.count
+    val damageReductionRequired: Boolean get() = requirements.any { it is DamageReductionRequirement }
+    fun teamSkillEvaluation(analysis: BoardAnalysis): TeamSkillEvaluation? = null
 
     fun patternPotential(board: Board): Int = requirements.sumOf { it.potential(board) }
 }
@@ -88,31 +93,13 @@ object MaximizeCombos : SolveGoal {
 internal class ConfiguredGoal(
     override val preferredColor: OrbColor?,
     override val requirements: List<SolveRequirement>,
+    val damageEvaluator: DamageEvaluator = PadDamageEvaluator(),
 ) : SolveGoal {
+    val usesDamageObjective: Boolean get() = preferredColor != null || damageEvaluator.usesTeamSkill
+    override fun teamSkillEvaluation(analysis: BoardAnalysis) = damageEvaluator.teamSkillEvaluation(analysis)
     override fun evaluate(analysis: BoardAnalysis) = GoalEvaluation(
         requirements = requirements.map { it.evaluate(analysis) },
-        primaryScore = preferredColor?.let { ColorDamageEstimate.scoreRelativeDamage(analysis, it) }
-            ?: analysis.comboCount.toLong(),
+        primaryScore = damageEvaluator.score(analysis, preferredColor),
         secondaryScore = analysis.comboCount,
     )
-}
-
-/** Board contribution scaled by 1600: match size × enhanced-orb factor × total combo factor. */
-object ColorDamageEstimate {
-    fun scoreRelativeDamage(analysis: BoardAnalysis, color: OrbColor): Long {
-        require(color.isAttacking)
-        val comboFactorInQuarters = analysis.comboCount.toLong() + 3
-        return analysis.allMatches.asSequence().filter { it.color == color }.sumOf { match ->
-            // Each + cancels one minus in this match. One remaining minus halves
-            // damage; two or more reduce it to zero, without removing the combo.
-            val netEnhanced = match.enhancedOrbCount - match.weakenedOrbCount
-            val weakenedFactor = when {
-                netEnhanced >= 0 -> 2
-                netEnhanced == -1 -> 1
-                else -> 0
-            }
-            comboFactorInQuarters * (match.size + 1) *
-                (100 + 6L * netEnhanced.coerceAtLeast(0)) * weakenedFactor / 2
-        }
-    }
 }

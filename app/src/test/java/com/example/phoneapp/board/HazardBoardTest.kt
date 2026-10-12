@@ -20,7 +20,7 @@ class HazardBoardTest {
     @Test
     fun weakenedOrbIsCountedAfterDroppingIntoTheSecondWave() {
         val board = Board(3, 4, listOf(
-            Orb(OrbColor.FIRE, setOf(OrbModifier.WEAKENED, OrbModifier.LOCKED)),
+            Orb(OrbColor.FIRE, setOf(OrbModifier.WEAKENED)),
             Orb(OrbColor.WATER), Orb(OrbColor.FIRE),
             Orb(OrbColor.JAMMER), Orb(OrbColor.WATER), Orb(OrbColor.JAMMER),
             Orb(OrbColor.JAMMER), Orb(OrbColor.WATER), Orb(OrbColor.JAMMER),

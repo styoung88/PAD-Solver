@@ -2,6 +2,7 @@ package com.example.phoneapp
 
 import android.app.Activity
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
@@ -165,7 +166,7 @@ class MainActivity : ComponentActivity() {
                         onOpenHandled = { overlaySettingsRequested = false },
                     ) { openSettings ->
                         when {
-                            isReadingCapture -> LoadingMessage("Reading the captured board…")
+                            isReadingCapture -> LoadingMessage("Reading the captured board…", openSettings)
                             solution != null && recognition is BoardRecognition.Recognized -> {
                                 SolutionScreen(
                                     recognition = recognition as BoardRecognition.Recognized,
@@ -174,6 +175,7 @@ class MainActivity : ComponentActivity() {
                                     onOpenSettings = openSettings,
                                     onShowInGame = { showSolutionInPad(solution!!) },
                                     onNewBoard = { resetToHome() },
+                                    game = solveSettings.game,
                                 )
                             }
                             recognition != null -> BoardPreviewScreen(
@@ -192,6 +194,7 @@ class MainActivity : ComponentActivity() {
                                     onScreenshotShortcutChanged = ::updateScreenshotShortcut,
                                     onManagePhotoAccess = ::managePhotoAccess,
                                     onOpenSettings = openSettings,
+                                    game = solveSettings.game,
                                 )
                             }
                         }
@@ -243,6 +246,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        boardState.refreshSettings()
         refreshPhotoAccess()
     }
 
@@ -294,7 +298,16 @@ class MainActivity : ComponentActivity() {
 
     private fun loadCapture(uri: Uri) = boardState.loadCapture(uri)
     private fun solveBoard() = boardState.solveBoard()
-    private fun updateSolveSettings(settings: SolveSettings) = boardState.updateSolveSettings(settings)
+    private fun updateSolveSettings(settings: SolveSettings) {
+        if (settings.game != solveSettings.game) {
+            pendingCapture = false
+            pendingRoutePermission = false
+            pendingOverlayStart = false
+            intent.removeExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)
+            intent.data = null
+        }
+        boardState.updateSolveSettings(settings)
+    }
 
     private fun showSolutionInPad(result: BoardSolution) {
         val recognized = recognition as? BoardRecognition.Recognized ?: return
@@ -312,6 +325,9 @@ class MainActivity : ComponentActivity() {
             putExtra(SolutionOverlayService.EXTRA_BOARD_ROWS, recognized.board.rows)
             putExtra(SolutionOverlayService.EXTRA_PATH, result.path.map(recognized.board::indexOf).toIntArray())
             putExtra(SolutionOverlayService.EXTRA_COMBO_COUNT, result.comboCount)
+            putExtra(SolutionOverlayService.EXTRA_BONUS_COMBO_COUNT, result.predictedMatches.bonusComboCount)
+            putExtra(SolutionOverlayService.EXTRA_ROUTE_SUMMARY, result.routeSummary)
+            putExtra(SolutionOverlayService.EXTRA_GAME_VARIANT, solveSettings.game.name)
         }
         ContextCompat.startForegroundService(this, overlayIntent)
 
@@ -319,25 +335,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openPad() {
-        val padIntent = findPadLaunchIntent()
-        if (padIntent != null) {
-            startActivity(padIntent)
-        } else {
-            Toast.makeText(this, "Switch to Puzzles & Dragons to use the overlay.", Toast.LENGTH_LONG).show()
+        val game = solveSettings.game
+        try {
+            startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                .setPackage(game.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "Switch to ${game.displayName} to use the overlay.", Toast.LENGTH_LONG).show()
             moveTaskToBack(true)
         }
-    }
-
-    private fun findPadLaunchIntent(): Intent? {
-        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        @Suppress("DEPRECATION")
-        val apps = packageManager.queryIntentActivities(launcher, 0)
-        val padApp = apps.firstOrNull { item ->
-            val label = item.loadLabel(packageManager).toString().lowercase()
-            "puzzle" in label && "dragon" in label
-        } ?: return null
-        return Intent(launcher).setClassName(padApp.activityInfo.packageName, padApp.activityInfo.name)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
     private fun resetToHome() {
@@ -353,7 +358,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @androidx.compose.runtime.Composable
-private fun LoadingMessage(message: String) {
+private fun LoadingMessage(message: String, onOpenSettings: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -361,5 +366,6 @@ private fun LoadingMessage(message: String) {
     ) {
         CircularProgressIndicator()
         Text(message)
+        androidx.compose.material3.TextButton(onClick = onOpenSettings) { Text("Solve settings") }
     }
 }

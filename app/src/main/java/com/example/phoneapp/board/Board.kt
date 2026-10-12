@@ -22,9 +22,10 @@ enum class OrbColor {
 
 /** Properties that can be added without multiplying the set of orb colors. */
 enum class OrbModifier {
-    LOCKED,
     ENHANCED,
     WEAKENED,
+    /** Adds one combo when this orb is cleared as part of a match. */
+    COMBO_BONUS,
 }
 
 data class Orb(

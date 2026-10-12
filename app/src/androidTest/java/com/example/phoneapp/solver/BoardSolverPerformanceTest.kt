@@ -1,6 +1,7 @@
 package com.example.phoneapp.solver
 
 import android.os.SystemClock
+import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.phoneapp.board.Board
@@ -8,6 +9,10 @@ import com.example.phoneapp.board.BoardSize
 import com.example.phoneapp.board.Orb
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
+import com.example.phoneapp.capture.BoardRecognition
+import com.example.phoneapp.capture.BoardRecognizer
+import com.example.phoneapp.game.GameVariant
+import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -17,7 +22,24 @@ import kotlin.random.Random
 
 @RunWith(AndroidJUnit4::class)
 class BoardSolverPerformanceTest {
+    @Test fun padZeroComboBonuses() {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        val bitmap = checkNotNull(context.assets.open("pad-zero/1000013017.jpg").use(BitmapFactory::decodeStream))
+        val board = try {
+            (BoardRecognizer.forGame(GameVariant.PAD_ZERO).recognize(bitmap) as BoardRecognition.Recognized).board
+        } finally { bitmap.recycle() }
+        compare("pad_zero_combo_bonuses", board, SolveSettings(game = GameVariant.PAD_ZERO))
+    }
+
     @Test fun darkTpa() = compare("dark_tpa", darkBoard(), SolveSettings(OrbColor.DARK, matchPatternFocus = MatchPattern.TPA))
+    @Test fun padZeroTeamCombo() = compare("pad_zero_team_combo", woodBoard(), SolveSettings(
+        game = GameVariant.PAD_ZERO, padZeroTeamSkill = PadZeroTeamSkill.COMBO))
+    @Test fun padZeroMulticolorReduction() = compare("pad_zero_multicolor_reduction", woodBoard(), SolveSettings(
+        preferredColor = OrbColor.WOOD, game = GameVariant.PAD_ZERO,
+        padZeroTeamSkill = PadZeroTeamSkill.MULTICOLOR, requireDamageReduction = true))
+    @Test fun padZeroLinkAndComboReduction() = compare("pad_zero_link_combo_reduction", twoColorBoard(), SolveSettings(
+        preferredColor = OrbColor.FIRE, game = GameVariant.PAD_ZERO,
+        padZeroTeamSkill = PadZeroTeamSkill.LINK_AND_COMBO, requireDamageReduction = true))
     @Test fun darkTpaMinimum() = compare("dark_tpa_minimum", darkBoard(), SolveSettings(OrbColor.DARK, 5, MatchPattern.TPA))
     @Test fun woodTpaMinimum() = compare("wood_tpa_minimum", woodBoard(), SolveSettings(OrbColor.WOOD, 5, MatchPattern.TPA))
     @Test fun fireLStrictMinimum() = compare("fire_l_strict", twoColorBoard(), SolveSettings(OrbColor.FIRE, 8, MatchPattern.L_SHAPE))

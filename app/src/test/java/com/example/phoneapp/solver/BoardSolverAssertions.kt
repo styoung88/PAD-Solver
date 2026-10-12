@@ -26,6 +26,8 @@ internal fun assertValidSolution(board: Board, options: SolveOptions, solution: 
     assertEquals(analysis, solution.predictedMatches)
     assertEquals(goal.evaluate(analysis).satisfied, solution.goalSatisfied)
     assertEquals(goal.preferredColor, solution.preferredColor)
+    assertEquals(goal.teamSkillEvaluation(analysis), solution.teamSkillEvaluation)
+    assertEquals(goal.damageReductionRequired, solution.damageReductionRequired)
     assertEquals(goal.matchPatternFocus, solution.matchPatternFocus)
     assertEquals(goal.targetComboCount, solution.targetComboCount)
     assertEquals(goal.targetComboCount?.let { analysis.comboCount >= it }, solution.comboMinimumSatisfied)

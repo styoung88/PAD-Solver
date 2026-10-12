@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasAnyAncestor
@@ -32,6 +33,7 @@ import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.MatchPattern
 import com.example.phoneapp.solver.SolveSettings
+import com.example.phoneapp.solver.PadZeroTeamSkill
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -75,13 +77,81 @@ class BoardScreenRegressionTest {
             }
         }
         compose.onNodeWithText("Open drawer").performClick()
-        compose.onNodeWithText("10 (exceeds board size)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("10 (exceeds board limit)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("This board has enough orbs for at most 6 combos without skyfall. Choose a lower minimum or capture a new board.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Minimum combos").performScrollTo().performClick()
         compose.onNode(hasText("7") and hasAnyAncestor(isPopup())).assertDoesNotExist()
         compose.onNode(hasText("6") and hasAnyAncestor(isPopup())).performScrollTo().performClick()
         compose.runOnIdle { assertEquals(6, settings.value.targetComboCount) }
+    }
+
+    @Test
+    fun comboBonusTargetsCanExceedThePhysicalMatchLimit() {
+        val settings = mutableStateOf(SolveSettings(game = com.example.phoneapp.game.GameVariant.PAD_ZERO))
+        val board = Board(3, 1, List(3) { Orb(OrbColor.FIRE, setOf(com.example.phoneapp.board.OrbModifier.COMBO_BONUS)) })
+        compose.setContent {
+            MaterialTheme {
+                SolveSettingsDrawer(settings.value, false, { settings.value = it }, "Apply and solve", {}, board = board) { open ->
+                    Button(onClick = open) { Text("Open drawer") }
+                }
+            }
+        }
+        compose.onNodeWithText("Open drawer").performClick()
+        compose.onNodeWithText("Minimum combos").performScrollTo().performClick()
+        compose.onNode(hasText("4") and hasAnyAncestor(isPopup())).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(4, settings.value.targetComboCount) }
+        compose.onNodeWithText("4 (exceeds board limit)").assertDoesNotExist()
+    }
+
+    @Test
+    fun bonusResultsExplainEffectiveTotalAndPhysicalMatches() {
+        val board = Board(3, 1, List(3) { Orb(OrbColor.FIRE, setOf(com.example.phoneapp.board.OrbModifier.COMBO_BONUS)) })
+        val analysis = BoardAnalyzer.resolveCascades(board)
+        val solution = BoardSolution(listOf(BoardPosition(0, 0)), analysis, true)
+        compose.setContent {
+            MaterialTheme {
+                SolutionScreen(recognized.copy(board = board), solution, false, {}, {}, {},
+                    game = com.example.phoneapp.game.GameVariant.PAD_ZERO)
+            }
+        }
+        compose.onNodeWithText("4 combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("1 match + 3 bonus combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Show route in PAD 0").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun teamSkillResultsShowAttackReductionAndFixedBonusSeparately() {
+        val analysis = BoardAnalysis(OrbColor.attackingColors.map { color ->
+            com.example.phoneapp.board.OrbMatch(color, (0..2).map { BoardPosition(0, it) }.toSet())
+        })
+        val team = PadZeroTeamSkill.FIVE_COLOR_ERASURE.evaluate(analysis, OrbColor.attackingColors.toSet())
+        val solution = BoardSolution(listOf(BoardPosition(0, 0)), analysis, true, teamSkillEvaluation = team)
+        compose.setContent { MaterialTheme {
+            SolutionScreen(recognized, solution, false, {}, {}, {}, game = com.example.phoneapp.game.GameVariant.PAD_ZERO)
+        } }
+        compose.onNodeWithText("5 combos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Team ATK ×25").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Damage reduction: 50%").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Bonus attack: 10 damage").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("15 combos").assertDoesNotExist()
+    }
+
+    @Test fun unmetDamageReductionHidesRouteEvenWhenAttackIsActive() {
+        val analysis = BoardAnalysis(OrbColor.attackingColors.map { color ->
+            com.example.phoneapp.board.OrbMatch(color, (0..2).map { BoardPosition(0, it) }.toSet())
+        })
+        val team = PadZeroTeamSkill.EXPERT_MULTICOLOR.evaluate(analysis, OrbColor.attackingColors.toSet())
+        val solution = BoardSolution(listOf(BoardPosition(0, 0)), analysis, false,
+            teamSkillEvaluation = team, damageReductionRequired = true)
+        compose.setContent { MaterialTheme {
+            SolutionScreen(recognized, solution, false, {}, {}, {}, game = com.example.phoneapp.game.GameVariant.PAD_ZERO)
+        } }
+        compose.onNodeWithText("Team ATK ×10").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Damage reduction: inactive").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Could not find a route that meets damage reduction. Showing the best attempt.")
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Show route in PAD 0").assertDoesNotExist()
+        compose.onNodeWithText("Adjust settings").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -130,21 +200,21 @@ class BoardScreenRegressionTest {
     }
 
     @Test
-    fun busySolutionDisablesRouteSettingsAndNewBoard() {
+    fun busySolutionKeepsGameSettingsAvailableButDisablesRouteAndNewBoard() {
         val solution = BoardSolution(listOf(BoardPosition(0, 0)), BoardAnalysis(emptyList()), goalSatisfied = true)
         compose.setContent { MaterialTheme { SolutionScreen(recognized, solution, true, {}, {}, {}) } }
         compose.onNodeWithText("Show route in PAD").assertIsNotEnabled()
         compose.onNodeWithText("New board").assertIsNotEnabled()
-        compose.onNodeWithContentDescription("Open solve settings").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Open solve settings").assertIsEnabled()
         compose.onNodeWithText("Recalculating route…").performScrollTo().assertIsDisplayed()
     }
 
     @Test
-    fun busyBoardDisablesActionsAndShowsProgress() {
+    fun busyBoardKeepsGameSettingsAvailableAndShowsProgress() {
         compose.setContent { MaterialTheme { BoardPreviewScreen(recognized, true, SolveSettings(), {}, {}) } }
         compose.onNodeWithText("Solve settings").assertIsNotEnabled()
         compose.onNodeWithText("New board").assertIsNotEnabled()
-        compose.onNodeWithContentDescription("Open solve settings").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Open solve settings").assertIsEnabled()
         compose.onNodeWithText("Finding a route…").performScrollTo().assertIsDisplayed()
     }
 

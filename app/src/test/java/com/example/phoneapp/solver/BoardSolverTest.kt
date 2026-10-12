@@ -69,7 +69,7 @@ class BoardSolverTest {
     }
 
     private val board = Board(columns = 4, rows = 3, orbs = listOf(
-        Orb(OrbColor.FIRE, setOf(OrbModifier.ENHANCED, OrbModifier.LOCKED)),
+        Orb(OrbColor.FIRE, setOf(OrbModifier.ENHANCED)),
         Orb(OrbColor.WATER), Orb(OrbColor.FIRE), Orb(OrbColor.WOOD),
         Orb(OrbColor.WATER), Orb(OrbColor.FIRE), Orb(OrbColor.WOOD), Orb(OrbColor.LIGHT),
         Orb(OrbColor.WATER), Orb(OrbColor.WOOD), Orb(OrbColor.LIGHT), Orb(OrbColor.DARK),
@@ -107,7 +107,7 @@ class BoardSolverTest {
         for (color in OrbColor.entries.filter { it != OrbColor.UNKNOWN }) {
             val blocker = if (color == OrbColor.WATER) OrbColor.FIRE else OrbColor.WATER
             val input = Board(4, 1, listOf(
-                Orb(color, setOf(OrbModifier.ENHANCED, OrbModifier.WEAKENED, OrbModifier.LOCKED)),
+                Orb(color, setOf(OrbModifier.ENHANCED, OrbModifier.WEAKENED)),
                 Orb(blocker), Orb(color, setOf(OrbModifier.WEAKENED)), Orb(color, setOf(OrbModifier.WEAKENED)),
             ))
             val options = SolveOptions(maxOrbMoves = 1, goal = SolveSettings(targetComboCount = 1).toGoal())

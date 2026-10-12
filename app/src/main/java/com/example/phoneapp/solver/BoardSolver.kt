@@ -49,9 +49,20 @@ data class BoardSolution(
     val matchPatternSatisfied: Boolean? = null,
     /** False only when orb inventory or board dimensions prove a requirement impossible. */
     val requirementsPossible: Boolean = true,
+    val teamSkillEvaluation: TeamSkillEvaluation? = null,
+    val damageReductionRequired: Boolean = false,
 ) {
     val comboCount: Int get() = predictedMatches.comboCount
     val orbMoves: Int get() = (path.size - 1).coerceAtLeast(0)
+    val routeSummary: String get() = buildList {
+        add("$comboCount combos" + if (predictedMatches.bonusComboCount > 0)
+            " · +${predictedMatches.bonusComboCount} bonus" else "")
+        teamSkillEvaluation?.let { team ->
+            add(team.attackSummary)
+            team.damageReductionSummary?.let(::add)
+            if (team.bonusAttackDamage > 0) add("Bonus attack: ${team.bonusAttackDamage} damage")
+        }
+    }.joinToString("\n")
 }
 
 /** Bounded drag-path search with separate candidate heuristics and final route ranking. */
@@ -67,12 +78,12 @@ class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Defa
         val searchGoal = (options.goal as? ConfiguredGoal)?.takeIf { goal ->
             goal.requirements.any { it is ComboMinimum }
         }?.let { goal ->
-            ConfiguredGoal(goal.preferredColor, goal.requirements.filterNot { it is ComboMinimum })
+            ConfiguredGoal(goal.preferredColor, goal.requirements.filterNot { it is ComboMinimum }, goal.damageEvaluator)
         } ?: options.goal
         val comboCapacity = board.comboCapacity
-        val explorationGoals = if (searchGoal is ConfiguredGoal && searchGoal.preferredColor != null && comboCapacity > 1) {
+        val explorationGoals = if (searchGoal is ConfiguredGoal && searchGoal.usesDamageObjective && comboCapacity > 1) {
             listOf(searchGoal, ConfiguredGoal(searchGoal.preferredColor,
-                listOf(ComboMinimum((comboCapacity + 1) / 2)) + searchGoal.requirements))
+                listOf(ComboMinimum((comboCapacity + 1) / 2)) + searchGoal.requirements, searchGoal.damageEvaluator))
         } else listOf(searchGoal)
         // A demanding user minimum may need its own pass after the shared exploration.
         val searchGoals = if (searchGoal !== options.goal) explorationGoals + options.goal else explorationGoals
@@ -179,6 +190,8 @@ class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Defa
                 it.countMatches(analysis, options.goal.preferredColor) > 0
             },
             requirementsPossible = requirementsPossible,
+            teamSkillEvaluation = options.goal.teamSkillEvaluation(analysis),
+            damageReductionRequired = options.goal.damageReductionRequired,
         )
     }
 
@@ -280,17 +293,17 @@ class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Defa
 
     private fun encodeOrb(orb: Orb): Int {
         var code = orb.color.ordinal
-        if (OrbModifier.LOCKED in orb.modifiers) code = code or LOCKED_BIT
         if (OrbModifier.ENHANCED in orb.modifiers) code = code or ENHANCED_BIT
         if (OrbModifier.WEAKENED in orb.modifiers) code = code or WEAKENED_BIT
+        if (OrbModifier.COMBO_BONUS in orb.modifiers) code = code or COMBO_BONUS_BIT
         return code
     }
 
     private fun colorOf(code: Int): OrbColor = OrbColor.entries[code and COLOR_MASK]
     private fun modifiersOf(code: Int): Set<OrbModifier> = buildSet {
-        if (code and LOCKED_BIT != 0) add(OrbModifier.LOCKED)
         if (code and ENHANCED_BIT != 0) add(OrbModifier.ENHANCED)
         if (code and WEAKENED_BIT != 0) add(OrbModifier.WEAKENED)
+        if (code and COMBO_BONUS_BIT != 0) add(OrbModifier.COMBO_BONUS)
     }
 
     private data class SearchState(
@@ -315,9 +328,9 @@ class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Defa
 
     private companion object {
         const val COLOR_MASK = 0b1111
-        const val LOCKED_BIT = 1 shl 4
         const val ENHANCED_BIT = 1 shl 5
         const val WEAKENED_BIT = 1 shl 6
+        const val COMBO_BONUS_BIT = 1 shl 7
         const val FRONTIER_DIVISOR = 4
         const val EVALUATION_CACHE_SIZE = 1024
     }

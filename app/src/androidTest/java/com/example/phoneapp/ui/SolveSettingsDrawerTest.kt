@@ -7,6 +7,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -18,10 +20,14 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.MainActivity
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
+import com.example.phoneapp.game.GameVariant
 import com.example.phoneapp.solver.SolveSettings
 import com.example.phoneapp.solver.SolveSettingsStore
+import com.example.phoneapp.solver.PadZeroTeamSkill
+import com.example.phoneapp.board.OrbColor
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -39,6 +45,8 @@ class SolveSettingsDrawerTest {
     @Before
     fun rememberSettings() {
         previousSettings = SolveSettingsStore(compose.activity).load()
+        SolveSettingsStore(compose.activity).save(SolveSettings())
+        compose.activityRule.scenario.recreate()
         compose.runOnUiThread { compose.activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
 
@@ -68,6 +76,95 @@ class SolveSettingsDrawerTest {
         waitForText("Fire combos")
         compose.onNodeWithText("Wood combos").assertDoesNotExist()
         compose.onNodeWithText("Show route in PAD").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun manualGameChoiceClearsCapturedBoardAndSurvivesRecreation() {
+        SolveSettingsStore(compose.activity).save(SolveSettings())
+        compose.activityRule.scenario.recreate()
+        loadCapture(openSettings = true)
+        waitForText("Apply and solve")
+        selectChoice("Game", "PAD 0")
+        assertEquals(GameVariant.PAD_ZERO, SolveSettingsStore(compose.activity).load().game)
+        compose.onNodeWithText("Done").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Close").performScrollTo().performClick()
+        compose.onNodeWithText("Game: PAD 0").assertIsDisplayed()
+        compose.onNodeWithText("Board captured").assertDoesNotExist()
+        compose.onNodeWithText("Open PAD 0 overlay").assertIsDisplayed()
+        compose.activityRule.scenario.recreate()
+        closeSettingsIfOpen()
+        compose.onNodeWithText("Game: PAD 0").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Open solve settings").performClick()
+        selectChoice("Game", "PAD")
+        assertEquals(GameVariant.PAD, SolveSettingsStore(compose.activity).load().game)
+    }
+
+    @Test
+    fun padZeroCaptureRecognizesBonusesAndOffersARoute() {
+        SolveSettingsStore(compose.activity).save(SolveSettings(game = GameVariant.PAD_ZERO,
+            orbMovement = com.example.phoneapp.solver.OrbMovement.LOW,
+            searchComplexity = com.example.phoneapp.solver.SearchComplexity.LOW))
+        compose.activityRule.scenario.recreate()
+        closeSettingsIfOpen()
+        loadCapture(openSettings = false, fixture = "pad-zero/1000013017.jpg")
+        waitForText("Board captured")
+        compose.onNodeWithText("Top-right +1 badges add one combo per marked orb cleared in a match.")
+            .performScrollTo().assertIsDisplayed()
+        exportScreenshot("pad-zero-board-preview.png")
+        compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
+        // The inventory bound includes the two marked orbs: 8 physical + 2 bonus.
+        selectChoice("Minimum combos", "10")
+        assertEquals(10, SolveSettingsStore(compose.activity).load().targetComboCount)
+        selectChoice("Minimum combos", "No minimum")
+        selectChoice("Team skill", "Expert Combo")
+        compose.onNodeWithText("Apply and solve").performScrollTo().performClick()
+        waitForText("Show route in PAD 0")
+        compose.onNodeWithText("Team ATK ×10").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Damage reduction: 50%").performScrollTo().assertIsDisplayed()
+        exportScreenshot("pad-zero-solution.png")
+        compose.onNodeWithText("Game: PAD 0").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Show route in PAD").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
+        selectChoice("Game", "PAD")
+        compose.onNodeWithText("Close").performScrollTo().performClick()
+        compose.onNodeWithText("Game: PAD").assertIsDisplayed()
+        compose.onNodeWithText("Show route in PAD 0").assertDoesNotExist()
+    }
+
+    @Test fun teamSkillControlsPersistAndOnlyOfferRelevantRequirements() {
+        SolveSettingsStore(compose.activity).save(SolveSettings(game = GameVariant.PAD_ZERO))
+        compose.activityRule.scenario.recreate()
+        closeSettingsIfOpen()
+        compose.onNodeWithContentDescription("Open solve settings").performClick()
+        selectChoice("Team skill", "Multicolor")
+        compose.onNodeWithContentDescription("Dark attack attribute").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Damage reduction").performScrollTo().performClick()
+        val saved = SolveSettingsStore(compose.activity).load()
+        assertEquals(PadZeroTeamSkill.MULTICOLOR, saved.padZeroTeamSkill)
+        assertEquals(OrbColor.attackingColors.toSet() - OrbColor.DARK, saved.teamAttackingAttributes)
+        assertTrue(saved.requireDamageReduction)
+        compose.onNodeWithText("Close").performScrollTo().performClick()
+        compose.activityRule.scenario.recreate()
+        closeSettingsIfOpen()
+        compose.onNodeWithContentDescription("Open solve settings").performClick()
+        compose.onNodeWithText("Multicolor").performScrollTo().assertIsDisplayed()
+        assertEquals(saved, SolveSettingsStore(compose.activity).load())
+        selectChoice("Team skill", "Expert Multicolor")
+        compose.onNodeWithContentDescription("Dark attack attribute").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Damage reduction").performScrollTo().assertIsDisplayed()
+        assertEquals(saved.teamAttackingAttributes, SolveSettingsStore(compose.activity).load().teamAttackingAttributes)
+        selectChoice("Team skill", "5 Color Erasure")
+        compose.onNodeWithContentDescription("Dark attack attribute").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Damage reduction").assertDoesNotExist()
+        assertEquals(saved.teamAttackingAttributes, SolveSettingsStore(compose.activity).load().teamAttackingAttributes)
+        selectChoice("Team skill", "Combo")
+        compose.onNodeWithContentDescription("Damage reduction").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Dark attack attribute").assertDoesNotExist()
+        assertEquals(false, SolveSettingsStore(compose.activity).load().requireDamageReduction)
+        selectChoice("Game", "PAD")
+        compose.onNodeWithText("Team skill").assertDoesNotExist()
+        selectChoice("Game", "PAD 0")
+        compose.onNodeWithText("Combo").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -139,6 +236,23 @@ class SolveSettingsDrawerTest {
         compose.onNode(hasText(choice) and hasAnyAncestor(isPopup())).performScrollTo().performClick()
     }
 
+    private fun exportScreenshot(name: String) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        assertTrue(androidx.test.uiautomator.UiDevice.getInstance(instrumentation)
+            .takeScreenshot(File(instrumentation.targetContext.getExternalFilesDir(null), name)))
+    }
+
+    private fun closeSettingsIfOpen() {
+        compose.waitForIdle()
+        val close = compose.onNodeWithText("Close")
+        // The Close button may be below the viewport in the longer PAD 0 drawer.
+        // Use horizontal drawer visibility, then scroll the button into view.
+        if (close.getUnclippedBoundsInRoot().right > 0.dp) {
+            close.performScrollTo().performClick()
+            compose.waitForIdle()
+        }
+    }
+
     private fun waitForText(text: String) {
         compose.waitUntil(timeoutMillis = 30_000) {
             compose.onAllNodesWithText(text).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
@@ -148,11 +262,11 @@ class SolveSettingsDrawerTest {
         node.assertIsDisplayed()
     }
 
-    private fun loadCapture(openSettings: Boolean) {
+    private fun loadCapture(openSettings: Boolean, fixture: String = "pad-board-reference.png") {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val file = File(instrumentation.targetContext.filesDir, "settings-drawer-test.png")
         captureFile = file
-        instrumentation.context.assets.open("pad-board-reference.png").use { input ->
+        instrumentation.context.assets.open(fixture).use { input ->
             file.outputStream().use { output -> input.copyTo(output) }
         }
         sendCapture(file, openSettings)

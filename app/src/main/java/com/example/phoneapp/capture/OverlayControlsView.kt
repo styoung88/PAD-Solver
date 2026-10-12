@@ -117,7 +117,7 @@ internal class OverlayControlsView(
             textSize = 13f
             setTextColor(0xFFF1F5F9.toInt())
             setShadowLayer(resources.dpToPx(1).toFloat(), 0f, resources.dpToPx(1).toFloat(), 0xCC000000.toInt())
-            maxLines = 3
+            maxLines = 5
             accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
         }
         addView(status, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = resources.dpToPx(8) })

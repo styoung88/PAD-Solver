@@ -5,6 +5,7 @@ data class OrbMatch(
     val positions: Set<BoardPosition>,
     val enhancedOrbCount: Int = 0,
     val weakenedOrbCount: Int = 0,
+    val comboBonusOrbCount: Int = 0,
 ) {
     val size: Int get() = positions.size
 }
@@ -16,8 +17,11 @@ data class BoardAnalysis(
     val columns: Int = Board.DEFAULT_COLUMNS,
     val rows: Int = Board.DEFAULT_ROWS,
 ) {
-    /** The first-wave matches plus any combos created by gravity. */
-    val comboCount: Int = cascadeWaves.sumOf { it.size }
+    /** Actual matches, including matches created by deterministic gravity. */
+    val physicalComboCount: Int = cascadeWaves.sumOf { it.size }
+    /** Each cleared bonus orb adds one combo, once, in its clear wave. */
+    val bonusComboCount: Int = cascadeWaves.sumOf { wave -> wave.sumOf { it.comboBonusOrbCount } }
+    val comboCount: Int = physicalComboCount + bonusComboCount
     val cascadeCount: Int get() = (cascadeWaves.size - 1).coerceAtLeast(0)
     val allMatches: List<OrbMatch> = cascadeWaves.flatten()
 }
@@ -92,6 +96,9 @@ object BoardAnalyzer {
                         },
                         weakenedOrbCount = positions.count { position ->
                             OrbModifier.WEAKENED in board[position].modifiers
+                        },
+                        comboBonusOrbCount = positions.count { position ->
+                            OrbModifier.COMBO_BONUS in board[position].modifiers
                         },
                     ),
                 )

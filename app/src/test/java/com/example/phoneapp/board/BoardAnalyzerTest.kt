@@ -80,7 +80,7 @@ class BoardAnalyzerTest {
         // then fall to the bottom row, producing the only second-wave combo.
         val original = board("GGDL", "FWLD", "FWGL", "FWWW").let { board ->
             board.copy(orbs = board.orbs.mapIndexed { index, orb ->
-                if (index == 0) orb.copy(modifiers = setOf(OrbModifier.ENHANCED, OrbModifier.LOCKED)) else orb
+                if (index == 0) orb.copy(modifiers = setOf(OrbModifier.ENHANCED)) else orb
             })
         }
         val snapshot = original.orbs.toList()
