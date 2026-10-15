@@ -35,6 +35,7 @@ class SolutionOverlayService : Service() {
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
     private var solveJob: kotlinx.coroutines.Job? = null
     private var latestCaptureUri: Uri? = null
+    private var latestSolvedBoard: SolvedBoard? = null
     private var capturePending = false
     private var captureGame = GameVariant.PAD
     private var game = GameVariant.PAD
@@ -79,6 +80,15 @@ class SolutionOverlayService : Service() {
         solveJob?.cancel()
         routeView?.let { runCatching { windowManager?.removeView(it) } }
         routeView = null
+        latestSolvedBoard = null
+        toolbarView?.setRouteVisibility(available = false)
+    }
+
+    private fun toggleRouteVisibility() {
+        val route = routeView ?: return
+        val visible = route.visibility != View.VISIBLE
+        route.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+        toolbarView?.setRouteVisibility(available = true, visible = visible)
     }
 
     private fun refreshGame() {
@@ -90,7 +100,7 @@ class SolutionOverlayService : Service() {
         capturePending = false
         stopService(Intent(this, ScreenCaptureService::class.java))
         toolbarView?.visibility = View.VISIBLE
-        toolbarView?.setStatus("${game.displayName} selected. Capture a new board.")
+        toolbarView?.setStatus("Capture a new board.")
     }
 
     private fun solveCapture(path: String) {
@@ -120,6 +130,7 @@ class SolutionOverlayService : Service() {
                 }
                 toolbarView?.setStatus("Finding your route…", busy = true)
                 val result = BoardSolver().solve(recognized.board, settings.toOptions(recognized.board))
+                latestSolvedBoard = SolvedBoard(settings.game, recognized, result)
                 if (result.goalSatisfied) {
                     showRoute(recognized.boardBounds, result.path.map(recognized.board::indexOf).toIntArray(),
                         recognized.captureWidth, recognized.captureHeight, recognized.board.columns, recognized.board.rows)
@@ -205,6 +216,8 @@ class SolutionOverlayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        latestSolvedBoard = SolvedBoardHandoff.takeFrom(intent)?.takeIf { it.game == game }
+        latestCaptureUri = null
         showRoute(bounds, positions, captureWidth, captureHeight, columns, rows)
         if (intent.hasExtra(EXTRA_COMBO_COUNT)) {
             toolbarView?.setResult(intent.getStringExtra(EXTRA_ROUTE_SUMMARY) ?: "${intent.getIntExtra(EXTRA_COMBO_COUNT, 0)}c",
@@ -245,6 +258,7 @@ class SolutionOverlayService : Service() {
         val toolbar = OverlayControlsView(this,
             onCapture = ::requestCapture,
             onSettings = ::openLatestCapture,
+            onToggleRoute = ::toggleRouteVisibility,
             onClose = {
                 stopService(Intent(this, ScreenCaptureService::class.java))
                 stopSelf()
@@ -266,7 +280,7 @@ class SolutionOverlayService : Service() {
                 toolbarLayoutParams?.let { toolbarPreferences.edit().putInt("x", it.x).putInt("y", it.y).apply() }
             },
         ).apply {
-            setStatus(game.displayName)
+            setRouteVisibility(available = routeView != null, visible = routeView?.visibility == View.VISIBLE)
         }
         toolbarView = toolbar
         val toolbarParams = WindowManager.LayoutParams(
@@ -286,17 +300,21 @@ class SolutionOverlayService : Service() {
     }
 
     private fun openLatestCapture() {
+        if (solveJob?.isActive == true) {
+            solveJob?.cancel()
+            toolbarView?.setStatus("")
+        }
+        routeView?.visibility = View.INVISIBLE
+        toolbarView?.setRouteVisibility(available = routeView != null, visible = false)
         startActivity(Intent(this, MainActivity::class.java).apply {
             latestCaptureUri?.let { uri ->
                 if (uri.scheme == "file") putExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH, uri.path)
                 else data = uri
             }
+            latestSolvedBoard?.let { SolvedBoardHandoff.attachTo(this, it) }
             putExtra(EXTRA_OPEN_SETTINGS, true)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         })
-        // Remove the controls from the settings screen, retaining the sharing session
-        // so showing the adjusted route does not require another consent prompt.
-        stopSelf()
     }
 
     override fun onDestroy() {

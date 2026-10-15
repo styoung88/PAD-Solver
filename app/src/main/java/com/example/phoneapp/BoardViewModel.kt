@@ -48,6 +48,12 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
         loadImage { BoardImageLoader.read(getApplication(), uri) }
     }
 
+    fun showSolvedBoard(recognized: BoardRecognition.Recognized, result: BoardSolution) {
+        reset()
+        recognition = recognized
+        solution = result
+    }
+
     private fun loadImage(decodeBitmap: () -> android.graphics.Bitmap?) {
         val game = solveSettings.game
         solveJob?.cancel()
@@ -123,8 +129,9 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateSolveSettings(settings: SolveSettings) {
-        applySettings(settings)
-        settingsStore.save(settings)
+        val selected = if (settings.game != solveSettings.game) settingsStore.load(settings.game) else settings
+        applySettings(selected)
+        settingsStore.save(selected)
     }
 
     fun refreshSettings() {

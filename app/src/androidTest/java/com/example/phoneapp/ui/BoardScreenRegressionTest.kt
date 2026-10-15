@@ -15,6 +15,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -253,7 +254,7 @@ class BoardScreenRegressionTest {
     @Test
     fun busyBoardKeepsGameSettingsAvailableAndShowsProgress() {
         compose.setContent { MaterialTheme { BoardPreviewScreen(recognized, true, SolveSettings(), {}, {}) } }
-        compose.onNodeWithText("Solve settings").assertIsNotEnabled()
+        compose.onNode(hasText("Solve settings") and !hasContentDescription("Open solve settings")).assertIsNotEnabled()
         compose.onNodeWithText("New board").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Open solve settings").assertIsEnabled()
         compose.onNodeWithText("Finding a route…").performScrollTo().assertIsDisplayed()

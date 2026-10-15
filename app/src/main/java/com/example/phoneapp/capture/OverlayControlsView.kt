@@ -10,8 +10,10 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.example.phoneapp.R
 import com.example.phoneapp.util.dpToPx
 
 /** Small native toolbar that does not intercept touches outside its own window. */
@@ -19,6 +21,7 @@ internal class OverlayControlsView(
     context: Context,
     onCapture: () -> Unit,
     onSettings: () -> Unit,
+    onToggleRoute: () -> Unit,
     onClose: () -> Unit,
     initiallyLocked: Boolean,
     onLockChanged: (Boolean) -> Unit,
@@ -30,7 +33,8 @@ internal class OverlayControlsView(
     private val status: TextView
     private val details: TextView
     private val capture: View
-    private val settings: TextView
+    private val settings: ImageView
+    private val routeVisibility: VisibilityIconView
     private val panelPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         color = 0x80111827.toInt()
         style = android.graphics.Paint.Style.FILL
@@ -82,6 +86,13 @@ internal class OverlayControlsView(
                 true
             }
         }, LayoutParams(0, resources.dpToPx(40), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
+        routeVisibility = VisibilityIconView(context).apply {
+            background = RippleDrawable(ColorStateList.valueOf(0x30FFFFFF), rounded(0xFF273246.toInt(), 9), null)
+            isFocusable = true
+            setOnClickListener { onToggleRoute() }
+        }
+        header.addView(routeVisibility, LayoutParams(resources.dpToPx(22), resources.dpToPx(22)).apply { marginEnd = resources.dpToPx(6) })
+        setRouteVisibility(available = false)
         header.addView(LockIconView(context).apply {
             locked = positionLocked
             background = RippleDrawable(ColorStateList.valueOf(0x30FFFFFF), rounded(0xFF273246.toInt(), 9), null)
@@ -107,9 +118,14 @@ internal class OverlayControlsView(
             isFocusable = true
             setOnClickListener { onCapture() }
         }
-        settings = button("⚙", 0xFF2D394D.toInt(), Color.WHITE, onSettings).apply {
-            textSize = 24f
+        settings = ImageView(context).apply {
+            setImageResource(R.drawable.ic_settings)
+            imageTintList = ColorStateList.valueOf(Color.WHITE)
+            scaleType = ImageView.ScaleType.CENTER
+            background = RippleDrawable(ColorStateList.valueOf(0x30FFFFFF), rounded(0xFF2D394D.toInt(), 12), null)
             contentDescription = "Open solve settings"
+            isFocusable = true
+            setOnClickListener { onSettings() }
         }
         actions.addView(capture, LayoutParams(0, resources.dpToPx(44), 1f).apply { marginEnd = resources.dpToPx(8) })
         actions.addView(settings, LayoutParams(0, resources.dpToPx(44), 1f))
@@ -146,6 +162,12 @@ internal class OverlayControlsView(
         status.setAutoSizeTextTypeUniformWithConfiguration(9, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         details.text = description
         details.visibility = if (description.isBlank()) GONE else VISIBLE
+    }
+
+    fun setRouteVisibility(available: Boolean, visible: Boolean = true) {
+        routeVisibility.routeVisible = !available || visible
+        routeVisibility.isEnabled = available
+        routeVisibility.alpha = if (available) 1f else 0.45f
     }
 
     private fun statusLabel() = TextView(context).apply {
@@ -203,6 +225,40 @@ internal class OverlayControlsView(
             canvas.drawLine(9f, 3f, 15f, 3f, paint)
             canvas.drawLine(15f, 3f, 17f, 6f, paint)
             canvas.drawCircle(12f, 13f, 4f, paint)
+            canvas.restore()
+        }
+    }
+
+    private class VisibilityIconView(context: Context) : View(context) {
+        var routeVisible: Boolean = true
+            set(value) {
+                field = value
+                contentDescription = if (value) "Hide overlay" else "Show overlay"
+                invalidate()
+            }
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = 0.9f
+            strokeCap = android.graphics.Paint.Cap.ROUND
+            strokeJoin = android.graphics.Paint.Join.ROUND
+        }
+        private val eye = android.graphics.Path().apply {
+            moveTo(1f, 6f)
+            cubicTo(3.5f, 1.5f, 8.5f, 1.5f, 11f, 6f)
+            cubicTo(8.5f, 10.5f, 3.5f, 10.5f, 1f, 6f)
+            close()
+        }
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            super.onDraw(canvas)
+            val density = resources.displayMetrics.density
+            canvas.save()
+            canvas.translate((width - 12 * density) / 2, (height - 12 * density) / 2)
+            canvas.scale(density, density)
+            canvas.drawPath(eye, paint)
+            canvas.drawCircle(6f, 6f, 1.8f, paint)
+            if (!routeVisible) canvas.drawLine(1f, 1f, 11f, 11f, paint)
             canvas.restore()
         }
     }
