@@ -537,7 +537,7 @@ private fun SolverAppBar(onSettings: () -> Unit, enabled: Boolean) {
         Text("PAD Solver", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
         IconButton(onClick = onSettings, enabled = enabled,
             modifier = Modifier.semantics { contentDescription = "Open solve settings" }) {
-            Text("⚙", style = MaterialTheme.typography.headlineSmall)
+            Icon(painterResource(R.drawable.ic_settings), contentDescription = null)
         }
     }
 }

@@ -30,6 +30,8 @@ import androidx.core.view.WindowCompat
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
+import com.example.phoneapp.capture.SolvedBoard
+import com.example.phoneapp.capture.SolvedBoardHandoff
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.SolveSettings
 import com.example.phoneapp.ui.BoardPreviewScreen
@@ -195,6 +197,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleCaptureRequest()
+        boardState.refreshSettings()
         consumeBoardIntent(intent)
         if (intent.getBooleanExtra(SolutionOverlayService.EXTRA_OPEN_SETTINGS, false)) {
             boardState.cancelSolve()
@@ -269,6 +272,7 @@ class MainActivity : ComponentActivity() {
             putExtra(SolutionOverlayService.EXTRA_ROUTE_SUMMARY, result.routeSummary)
             putExtra(SolutionOverlayService.EXTRA_ROUTE_DETAILS, result.routeDetails)
             putExtra(SolutionOverlayService.EXTRA_GAME_VARIANT, solveSettings.game.name)
+            SolvedBoardHandoff.attachTo(this, SolvedBoard(solveSettings.game, recognized, result))
         }
         ContextCompat.startForegroundService(this, overlayIntent)
 
@@ -292,6 +296,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun consumeBoardIntent(source: Intent) {
+        SolvedBoardHandoff.takeFrom(source)?.takeIf { it.game == solveSettings.game }?.let {
+            boardState.showSolvedBoard(it.recognition, it.solution)
+            return
+        }
         source.getStringExtra(ScreenCaptureService.EXTRA_CAPTURE_PATH)?.let(boardState::loadCapture)
         source.data?.let(boardState::loadCapture)
     }
