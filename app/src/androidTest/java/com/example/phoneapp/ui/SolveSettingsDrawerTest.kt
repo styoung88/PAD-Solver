@@ -42,18 +42,24 @@ class SolveSettingsDrawerTest {
 
     private var captureFile: File? = null
     private lateinit var previousSettings: SolveSettings
+    private lateinit var previousProfiles: List<SolveSettings>
 
     @Before
     fun rememberSettings() {
-        previousSettings = SolveSettingsStore(compose.activity).load()
-        SolveSettingsStore(compose.activity).save(SolveSettings())
+        val store = SolveSettingsStore(compose.activity)
+        previousSettings = store.load()
+        previousProfiles = GameVariant.entries.map(store::load)
+        GameVariant.entries.forEach { store.save(SolveSettings(game = it)) }
+        store.save(SolveSettings())
         compose.activityRule.scenario.recreate()
         compose.runOnUiThread { compose.activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
 
     @After
     fun cleanUp() {
-        SolveSettingsStore(compose.activity).save(previousSettings)
+        val store = SolveSettingsStore(compose.activity)
+        previousProfiles.forEach(store::save)
+        store.save(previousSettings)
         captureFile?.delete()
     }
 
@@ -132,6 +138,34 @@ class SolveSettingsDrawerTest {
         compose.onNodeWithText("Game: PAD").assertDoesNotExist()
         compose.onNodeWithText("Open PAD overlay").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Show route in PAD 0").assertDoesNotExist()
+    }
+
+    @Test fun switchingGamesRestoresEachProfileAndSurvivesRecreation() {
+        val store = SolveSettingsStore(compose.activity)
+        compose.onNodeWithContentDescription("Open solve settings").performClick()
+        selectChoice("Minimum combos", "6")
+        selectChoice("Match pattern", "Cross")
+        selectChoice("Optimize color damage for", "Wood")
+        val pad = store.load()
+        selectChoice("Game", "PAD 0")
+        assertEquals(SolveSettings(game = GameVariant.PAD_ZERO), store.load())
+        selectChoice("Minimum combos", "9")
+        selectChoice("Optimize color damage for", "Fire")
+        selectChoice("Team skill", "Multicolor")
+        val padZero = store.load()
+        selectChoice("Game", "PAD")
+        assertEquals(pad, store.load())
+        compose.onNode(hasText("Wood") and hasText("Optimize color damage for")).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Team skill").assertDoesNotExist()
+        compose.onNodeWithText("Close").performClick()
+        compose.activityRule.scenario.recreate()
+        closeSettingsIfOpen()
+        compose.onNodeWithContentDescription("Open solve settings").performClick()
+        assertEquals(pad, SolveSettingsStore(compose.activity).load())
+        selectChoice("Game", "PAD 0")
+        assertEquals(padZero, SolveSettingsStore(compose.activity).load())
+        compose.onNodeWithText("Multicolor").performScrollTo().assertIsDisplayed()
+        compose.onNode(hasText("Fire") and hasText("Optimize color damage for")).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun teamSkillControlsPersistAndOnlyOfferRelevantRequirements() {

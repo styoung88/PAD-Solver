@@ -18,6 +18,7 @@ class BoardViewModelLifecycleTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val store = SolveSettingsStore(instrumentation.targetContext)
         val previousSettings = store.load()
+        val previousProfiles = GameVariant.entries.map(store::load)
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             lateinit var model: BoardViewModel
             scenario.onActivity { model = BoardViewModel(it.application) }
@@ -61,6 +62,7 @@ class BoardViewModelLifecycleTest {
             } finally {
                 scenario.onActivity {
                     model.reset()
+                    previousProfiles.forEach(store::save)
                     store.save(previousSettings)
                 }
                 file.delete()

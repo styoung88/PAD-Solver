@@ -27,6 +27,7 @@ import com.example.phoneapp.BoardViewModel
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
+import com.example.phoneapp.game.GameVariant
 import com.example.phoneapp.solver.SolveSettings
 import com.example.phoneapp.solver.SolveSettingsStore
 import org.junit.After
@@ -44,6 +45,7 @@ class PermissionFlowTest {
     private val device = UiDevice.getInstance(instrumentation)
     private val settings = SolveSettingsStore(context)
     private lateinit var originalSettings: SolveSettings
+    private lateinit var originalProfiles: List<SolveSettings>
     private var originalOverlayMode = AppOpsManager.MODE_DEFAULT
     private val timeout = 15_000L
 
@@ -52,6 +54,7 @@ class PermissionFlowTest {
         context.stopService(Intent(context, SolutionOverlayService::class.java))
         instrumentation.waitForIdleSync()
         originalSettings = settings.load()
+        originalProfiles = GameVariant.entries.map(settings::load)
         settings.save(SolveSettings())
         @Suppress("DEPRECATION")
         originalOverlayMode = (context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager)
@@ -61,6 +64,7 @@ class PermissionFlowTest {
     @After fun restore() {
         context.stopService(Intent(context, ScreenCaptureService::class.java))
         context.stopService(Intent(context, SolutionOverlayService::class.java))
+        originalProfiles.forEach(settings::save)
         settings.save(originalSettings)
         setOverlayMode(when (originalOverlayMode) {
             AppOpsManager.MODE_ALLOWED -> "allow"

@@ -35,19 +35,22 @@ class SolveSettingsStoreTest {
             .putString("match_pattern", "TPA")
             .commit()
         assertEquals(SolveSettings(OrbColor.WOOD, 6, MatchPattern.TPA), SolveSettingsStore(preferences).load())
+        assertEquals(SolveSettings(OrbColor.WOOD, 6, MatchPattern.TPA, game = GameVariant.PAD_ZERO),
+            SolveSettingsStore(preferences).load(GameVariant.PAD_ZERO))
+        assertFalse(preferences.contains("preferred_orb_color"))
     }
 
     @Test
     fun invalidNamesColorsTargetsAndTypesFallBackToDefaults() {
         for (color in listOf("OLD_COLOR", "HEART", "UNKNOWN")) {
-            preferences.edit()
+            preferences.edit().clear()
                 .putString("preferred_orb_color", color)
                 .putInt("target_combo_count", -1)
                 .putString("match_pattern", "OLD_PATTERN")
                 .commit()
             assertEquals(SolveSettings(), SolveSettingsStore(preferences).load())
         }
-        preferences.edit()
+        preferences.edit().clear()
             .putInt("preferred_orb_color", 1)
             .putString("target_combo_count", "5")
             .putBoolean("match_pattern", true)
@@ -65,9 +68,9 @@ class SolveSettingsStoreTest {
         preferences.edit().putBoolean("unrelated", true).commit()
         writer.save(SolveSettings())
         assertEquals(SolveSettings(), reader.load())
-        assertFalse(preferences.contains("preferred_orb_color"))
-        assertFalse(preferences.contains("target_combo_count"))
-        assertFalse(preferences.contains("match_pattern"))
+        assertFalse(preferences.contains("PAD.preferred_orb_color"))
+        assertFalse(preferences.contains("PAD.target_combo_count"))
+        assertFalse(preferences.contains("PAD.match_pattern"))
         assertFalse(preferences.contains("board_size_override"))
         assertEquals(true, preferences.getBoolean("unrelated", false))
     }
@@ -93,7 +96,7 @@ class SolveSettingsStoreTest {
         for (value in listOf("REMOVED_GAME", "", "PAD")) {
             preferences.edit().putString("game_variant", value).commit()
             assertEquals(GameVariant.PAD, store.load().game)
-            assertEquals(6, store.load().targetComboCount)
+            assertEquals(null, store.load().targetComboCount)
         }
         preferences.edit().putInt("game_variant", 1).commit()
         assertEquals(GameVariant.PAD, store.load().game)
@@ -127,7 +130,7 @@ class SolveSettingsStoreTest {
                 assertEquals(settings, SolveSettingsStore(preferences).load())
             }
         }
-        preferences.edit().putInt("orb_movement", 1).putString("search_complexity", "OLD").commit()
+        preferences.edit().putInt("PAD.orb_movement", 1).putString("PAD.search_complexity", "OLD").commit()
         assertEquals(SolveSettings(), store.load())
     }
 
@@ -138,8 +141,9 @@ class SolveSettingsStoreTest {
                 requireDamageReduction = true, teamAttackingAttributes = setOf(OrbColor.FIRE, OrbColor.WOOD))
             store.save(settings)
             assertEquals(settings, SolveSettingsStore(preferences).load())
-            store.save(settings.copy(game = GameVariant.PAD))
-            assertEquals(settings.copy(game = GameVariant.PAD), store.load())
+            store.save(SolveSettings())
+            assertEquals(SolveSettings(), store.load())
+            assertEquals(settings, SolveSettingsStore(preferences).load(GameVariant.PAD_ZERO))
         }
         val emptyAttributes = SolveSettings(game = GameVariant.PAD_ZERO, teamAttackingAttributes = emptySet())
         store.save(emptyAttributes)
@@ -153,8 +157,47 @@ class SolveSettingsStoreTest {
             .putString("preferred_orb_color", "WOOD").commit()
         val expected = SolveSettings(preferredColor = OrbColor.WOOD)
         assertEquals(expected, SolveSettingsStore(preferences).load())
-        preferences.edit().putString("pad_zero_team_skill", "REMOVED")
-            .putStringSet("pad_zero_attacking_attributes", setOf("FIRE", "HEART", "OLD_COLOR")).commit()
+        preferences.edit().putString("PAD.pad_zero_team_skill", "REMOVED")
+            .putStringSet("PAD.pad_zero_attacking_attributes", setOf("FIRE", "HEART", "OLD_COLOR")).commit()
         assertEquals(expected, SolveSettingsStore(preferences).load())
+    }
+
+    @Test fun gameProfilesSaveClearAndReloadIndependently() {
+        val store = SolveSettingsStore(preferences)
+        val pad = SolveSettings(OrbColor.WOOD, 6, MatchPattern.CROSS,
+            orbMovement = OrbMovement.LOW, searchComplexity = SearchComplexity.HIGH)
+        val padZero = SolveSettings(OrbColor.FIRE, 9, MatchPattern.TPA,
+            orbMovement = OrbMovement.HIGH, searchComplexity = SearchComplexity.VERY_HIGH,
+            game = GameVariant.PAD_ZERO, padZeroTeamSkill = PadZeroTeamSkill.MULTICOLOR,
+            requireDamageReduction = true, teamAttackingAttributes = setOf(OrbColor.FIRE, OrbColor.LIGHT))
+        store.save(pad)
+        store.save(padZero)
+        val reader = SolveSettingsStore(preferences)
+        assertEquals(padZero, reader.load())
+        assertEquals(pad, reader.load(GameVariant.PAD))
+        assertEquals(padZero, reader.load())
+        store.save(SolveSettings())
+        assertEquals(SolveSettings(), reader.load())
+        assertEquals(padZero, reader.load(GameVariant.PAD_ZERO))
+    }
+
+    @Test fun migrationPreservesTheSelectedGameAndBothProfilesAfterFutureSaves() {
+        preferences.edit().putString("game_variant", "PAD_ZERO")
+            .putString("preferred_orb_color", "DARK").putInt("target_combo_count", 8)
+            .putString("orb_movement", "HIGH").putString("pad_zero_team_skill", "MULTICOLOR")
+            .putBoolean("pad_zero_require_damage_reduction", true)
+            .putStringSet("pad_zero_attacking_attributes", setOf("FIRE", "WOOD"))
+            .putBoolean("unrelated", true).commit()
+        val store = SolveSettingsStore(preferences)
+        val original = SolveSettings(preferredColor = OrbColor.DARK, targetComboCount = 8,
+            orbMovement = OrbMovement.HIGH, game = GameVariant.PAD_ZERO,
+            padZeroTeamSkill = PadZeroTeamSkill.MULTICOLOR, requireDamageReduction = true,
+            teamAttackingAttributes = setOf(OrbColor.FIRE, OrbColor.WOOD))
+        assertEquals(original, store.load())
+        assertEquals(original.copy(game = GameVariant.PAD), store.load(GameVariant.PAD))
+        store.save(SolveSettings(game = GameVariant.PAD_ZERO))
+        assertEquals(original.copy(game = GameVariant.PAD), SolveSettingsStore(preferences).load(GameVariant.PAD))
+        assertEquals(true, preferences.getBoolean("unrelated", false))
+        assertFalse(preferences.contains("target_combo_count"))
     }
 }

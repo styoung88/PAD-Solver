@@ -129,8 +129,9 @@ class BoardViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateSolveSettings(settings: SolveSettings) {
-        applySettings(settings)
-        settingsStore.save(settings)
+        val selected = if (settings.game != solveSettings.game) settingsStore.load(settings.game) else settings
+        applySettings(selected)
+        settingsStore.save(selected)
     }
 
     fun refreshSettings() {
