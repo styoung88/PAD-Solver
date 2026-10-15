@@ -535,9 +535,11 @@ fun SolutionScreen(
 private fun SolverAppBar(onSettings: () -> Unit, enabled: Boolean) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("PAD Solver", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-        IconButton(onClick = onSettings, enabled = enabled,
+        TextButton(onClick = onSettings, enabled = enabled,
             modifier = Modifier.semantics { contentDescription = "Open solve settings" }) {
             Icon(painterResource(R.drawable.ic_settings), contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text("Solve settings")
         }
     }
 }

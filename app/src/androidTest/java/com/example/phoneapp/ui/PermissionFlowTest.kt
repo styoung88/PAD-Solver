@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.printToString
 import androidx.test.core.app.ActivityScenario
 import androidx.lifecycle.ViewModelProvider
@@ -147,7 +148,7 @@ class PermissionFlowTest {
         try {
             // Loading also offers settings; wait until recognition has produced the board.
             awaitText("Board captured", scroll = false, clickable = false, timeoutMillis = 60_000)
-            awaitText("Solve settings").performClick()
+            compose.onNodeWithContentDescription("Open solve settings").performScrollTo().performClick()
             awaitText("Apply and solve", scroll = false).assertIsDisplayed().performClick()
             // Software rendering and shared CI CPUs need more time for the real solve.
             val showRoute = awaitText("Show route in PAD", timeoutMillis = 60_000)
