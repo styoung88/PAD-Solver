@@ -8,7 +8,7 @@ The reported differences are board dimensions or placement, hazard artwork (espe
 
 - [x] Add a saved **Game: PAD / PAD 0** choice, defaulting existing installations to PAD.
 - [x] Use that selection to choose the recognition flow; keep grid size detection independent of game selection.
-- [x] Apply the same selection to the screenshot picker, live capture, automatic screenshot solving, and route display. Snapshot it for each operation; changing games must cancel pending work and clear incompatible board/route results.
+- [x] Apply the same selection to the screenshot picker, live capture, and route display. Snapshot it for each operation; changing games must cancel pending work and clear incompatible board/route results.
 - [x] Make the selected game visible in settings and board review. Game-specific text and any game-opening action must follow the saved choice.
 
 The player's choice is authoritative. Both choices remain available without installed-game discovery, foreground-app inference, or image-based game identification.

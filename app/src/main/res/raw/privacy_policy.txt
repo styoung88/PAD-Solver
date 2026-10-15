@@ -1,16 +1,16 @@
 PAD Solver Privacy Policy
-Updated October 7, 2026
+Updated October 14, 2026
 
 PAD Solver processes board images on your device to recognize orbs and calculate routes. It has no accounts, advertising, analytics, or network uploads.
 
-Images and photo access
-You can choose an image with the system photo picker. If you enable automatic screenshots and grant full photo access, PAD Solver queries image names and folders to detect newly saved screenshots while the floating overlay is open. It reads matching screenshots to solve their boards. Screenshots can include other information visible on your screen. Turn off Enable screenshots or close the overlay to stop monitoring. Revoke photo access in Android Settings at any time. Original photos and screenshots are not modified or deleted.
+Selected images
+You can choose an image with the system photo picker. PAD Solver reads only the image you select and does not require access to your photo library. Original images are not modified or deleted.
 
 Screen sharing and overlays
 Capture uses Android's screen-sharing consent to read a frame when you request a board capture. Stop sharing through Android's controls or close the overlay. Draw-over-apps access displays a floating toolbar and route; it does not automate game input. The app examines launcher app labels to find Puzzles & Dragons locally.
 
 Storage, backup, and deletion
-The most recent screen capture is stored in private app storage and replaced by the next successful capture. Picked and automatically detected screenshots are read from their existing location. Board and route results are held in memory. Preferences are stored locally; solve preferences can be included in Android backup and device transfer. Captures and capture preferences are excluded from backup. Clear the app's storage in Android Settings or uninstall it to remove its local data. Screenshots in your photo library and existing system backups are managed separately through Android and your backup provider.
+The most recent screen capture is stored in private app storage and replaced by the next successful capture. Selected images are read from their existing location. Board and route results are held in memory. Preferences are stored locally; solve preferences can be included in Android backup and device transfer. Captures and overlay preferences are excluded from backup. Clear the app's storage in Android Settings or uninstall it to remove its local data. Images in your photo library and existing system backups are managed separately through Android and your backup provider.
 
 Sharing and security
 PAD Solver does not send images, board data, app lists, or preferences to the developer or third parties. Android permissions and private app storage protect access. Android and Google Play may process information independently under their own policies.

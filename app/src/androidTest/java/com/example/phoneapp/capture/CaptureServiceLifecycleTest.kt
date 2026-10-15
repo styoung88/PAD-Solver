@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.phoneapp.MainActivity
+import com.example.phoneapp.solver.SolveSettingsStore
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -51,7 +52,8 @@ class CaptureServiceLifecycleTest {
             awaitOverlay(true)
             scenario.onActivity { activity ->
                 activity.startService(Intent(activity, SolutionOverlayService::class.java)
-                    .setAction(SolutionOverlayService.ACTION_SHOW))
+                    .setAction(SolutionOverlayService.ACTION_SHOW)
+                    .putExtra(SolutionOverlayService.EXTRA_GAME_VARIANT, SolveSettingsStore(activity).load().game.name))
             }
             awaitOverlay(false)
         }

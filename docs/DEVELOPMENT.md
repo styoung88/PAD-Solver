@@ -23,9 +23,8 @@ Follow `AGENTS.md` for branches, commits, merges, and authorized phone updates.
 
 ## Regression decisions
 
-- Request no access on launch. The picker needs no broad photo access; showing the toolbar/route needs overlay access; only Capture starts projection consent. Notifications must not block either service. New installs explicitly enable screenshots; full-access legacy users retain their choice.
-- Automatic screenshots read the saved image, independently of projection, only while the overlay is open. Recheck grants before watching; limited/denied access leaves Capture and the picker usable. The overlay has its own foreground service; stopping sharing keeps it usable. Backup/transfer retains solve preferences only.
-- Selected photo access can reopen reselection without an Allow all choice. Explain Settings for selected access or blocked denial; otherwise request permission. Use App info with a best-effort Permissions highlight; direct permission pages require system privileges. Hide permission controls with full access.
+- Request no access on launch. The picker needs no photo-library permission; showing the toolbar/route needs overlay access; only Capture starts projection consent. Notifications must not block either service.
+- The overlay has its own foreground service; stopping sharing keeps it usable. Backup/transfer retains solve preferences only.
 - Test legal routes and independently checked results, not one exact path or a global optimum; the solver uses bounded search.
 - Capture must use a fresh reader to discard overlay frames, including on static boards. Do not compare image timestamps with system clocks; their time bases can differ.
 - Capture changes need phone checks: deny and retry, capture a static board twice, stop while pending, confirm the toolbar remains usable and stale routes stay cleared, then restart sharing. Hardware timeouts and disk-full writes still need device checks.
