@@ -20,7 +20,7 @@ Install SDK Platform 37 and Android SDK Build Tools 36.0.0 from Android Studio's
 
 Each screen-capture session requires system approval. Notifications are needed for the capture action on Android 13 and later. Captured images are kept in the app's private storage and are excluded from Android backup. They are not sent over the network.
 
-The floating Capture button clears the route and hides the toolbar before reading a fresh screen frame. Automatic solving of a normal phone screenshot reads the saved image after Android takes it; any route visible in that image is included. Clearing the live route during processing does not remove it from the saved screenshot.
+The floating Capture button clears the route and hides the toolbar before reading a fresh screen frame. Use **Choose existing screenshot** to review and solve a saved board with the system photo picker; no photo-library permission is needed.
 
 Choose **Game: PAD / PAD 0** in solve settings. The saved choice applies to captures, screenshots, and game-opening actions; changing it clears the previous board and route and ends screen sharing. Existing installations default to PAD. PAD 0 supports the supplied 6×5 layout, ordinary orbs, jammers, and combo-bonus badges. Each matched bonus orb adds one combo, including in cascades. Combo targets and results include these bonuses. Orb lock badges are ignored in both games.
 

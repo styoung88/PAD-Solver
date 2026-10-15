@@ -39,10 +39,8 @@ class PermissionFlowTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val device = UiDevice.getInstance(instrumentation)
-    private val preferences = context.getSharedPreferences("capture_preferences", Context.MODE_PRIVATE)
     private val settings = SolveSettingsStore(context)
     private lateinit var originalSettings: SolveSettings
-    private var originalScreenshotChoice: Boolean? = null
     private var originalOverlayMode = AppOpsManager.MODE_DEFAULT
     private val timeout = 15_000L
 
@@ -50,8 +48,6 @@ class PermissionFlowTest {
         context.stopService(Intent(context, ScreenCaptureService::class.java))
         context.stopService(Intent(context, SolutionOverlayService::class.java))
         instrumentation.waitForIdleSync()
-        originalScreenshotChoice = if (preferences.contains("screenshot_shortcut")) preferences.getBoolean("screenshot_shortcut", false) else null
-        preferences.edit().putBoolean("screenshot_shortcut", false).commit()
         originalSettings = settings.load()
         settings.save(SolveSettings())
         @Suppress("DEPRECATION")
@@ -63,9 +59,6 @@ class PermissionFlowTest {
         context.stopService(Intent(context, ScreenCaptureService::class.java))
         context.stopService(Intent(context, SolutionOverlayService::class.java))
         settings.save(originalSettings)
-        preferences.edit().apply {
-            originalScreenshotChoice?.let { putBoolean("screenshot_shortcut", it) } ?: remove("screenshot_shortcut")
-        }.commit()
         setOverlayMode(when (originalOverlayMode) {
             AppOpsManager.MODE_ALLOWED -> "allow"
             AppOpsManager.MODE_IGNORED -> "ignore"
@@ -108,7 +101,6 @@ class PermissionFlowTest {
             assertTrue(SolutionOverlayService.enabled)
             assertFalse(ScreenCaptureService.active)
             assertFalse(device.hasObject(By.text("Capture")))
-            assertFalse(device.hasObject(By.text("Screenshots disabled. Tap Capture instead.")))
         }
     }
 

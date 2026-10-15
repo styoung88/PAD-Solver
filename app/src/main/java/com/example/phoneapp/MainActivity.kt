@@ -30,13 +30,10 @@ import androidx.core.view.WindowCompat
 import com.example.phoneapp.capture.BoardRecognition
 import com.example.phoneapp.capture.ScreenCaptureService
 import com.example.phoneapp.capture.SolutionOverlayService
-import com.example.phoneapp.capture.PhotoAccess
-import com.example.phoneapp.capture.ScreenshotShortcut
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.SolveSettings
 import com.example.phoneapp.ui.BoardPreviewScreen
 import com.example.phoneapp.ui.HomeScreen
-import com.example.phoneapp.ui.PhotoAccessSettingsDialog
 import com.example.phoneapp.ui.OverlayPermissionDialog
 import com.example.phoneapp.ui.SolveSettingsDrawer
 import com.example.phoneapp.ui.SolutionScreen
@@ -52,14 +49,7 @@ class MainActivity : ComponentActivity() {
     private var pendingRoutePermission = false
     private var pendingCapture = false
     private var pendingOverlayStart = false
-    private val screenshotShortcut by lazy { ScreenshotShortcut(this) }
-    private var screenshotShortcutEnabled by mutableStateOf(false)
-    private var photoAccess by mutableStateOf(PhotoAccess.NONE)
-    private var photoSettingsHelpVisible by mutableStateOf(false)
     private var overlayHelpVisible by mutableStateOf(false)
-    private val photoPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        refreshPhotoAccess()
-    }
 
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -123,8 +113,6 @@ class MainActivity : ComponentActivity() {
         pendingCapture = savedInstanceState?.getBoolean("pending_capture") ?: false
         pendingOverlayStart = savedInstanceState?.getBoolean("pending_overlay") ?: false
         pendingRoutePermission = savedInstanceState?.getBoolean("pending_route") ?: false
-        screenshotShortcutEnabled = screenshotShortcut.enabled
-        refreshPhotoAccess()
         boardState.refreshSettings()
         if (savedInstanceState == null) consumeBoardIntent(intent)
         overlaySettingsRequested = intent.getBooleanExtra(SolutionOverlayService.EXTRA_OPEN_SETTINGS, false)
@@ -142,15 +130,6 @@ class MainActivity : ComponentActivity() {
                             pendingRoutePermission = false
                         },
                     )
-                    if (photoSettingsHelpVisible) {
-                        PhotoAccessSettingsDialog(
-                            onOpenSettings = {
-                                photoSettingsHelpVisible = false
-                                openPhotoSettings()
-                            },
-                            onDismiss = { photoSettingsHelpVisible = false },
-                        )
-                    }
                     SolveSettingsDrawer(
                         settings = solveSettings,
                         isSolving = isSolving || isReadingCapture,
@@ -189,10 +168,6 @@ class MainActivity : ComponentActivity() {
                                 HomeScreen(
                                     onCapture = ::startOverlay,
                                     onChooseScreenshot = ::chooseExistingScreenshot,
-                                    screenshotShortcutEnabled = screenshotShortcutEnabled,
-                                    photoAccess = photoAccess,
-                                    onScreenshotShortcutChanged = ::updateScreenshotShortcut,
-                                    onManagePhotoAccess = ::managePhotoAccess,
                                     onOpenSettings = openSettings,
                                     game = solveSettings.game,
                                 )
@@ -247,40 +222,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         boardState.refreshSettings()
-        refreshPhotoAccess()
-    }
-
-    private fun refreshPhotoAccess() {
-        photoAccess = PhotoAccess.current(this)
-        if (photoAccess == PhotoAccess.FULL) photoSettingsHelpVisible = false
-        if (SolutionOverlayService.enabled) {
-            startService(Intent(this, SolutionOverlayService::class.java).setAction(SolutionOverlayService.ACTION_REFRESH_SHORTCUT))
-        }
-    }
-
-    private fun updateScreenshotShortcut(enabled: Boolean) {
-        screenshotShortcut.enabled = enabled
-        screenshotShortcutEnabled = enabled
-        refreshPhotoAccess()
-        if (enabled && photoAccess != PhotoAccess.FULL) {
-            managePhotoAccess()
-        }
-    }
-
-    private fun managePhotoAccess() {
-        refreshPhotoAccess()
-        if (photoAccess == PhotoAccess.FULL) return
-        val permissions = PhotoAccess.requestedPermissions()
-        if (screenshotShortcut.shouldOpenPhotoSettings(photoAccess, shouldShowRequestPermissionRationale(permissions.first()))) {
-            photoSettingsHelpVisible = true
-        } else {
-            screenshotShortcut.photoAccessRequested = true
-            photoPermissionLauncher.launch(permissions)
-        }
-    }
-
-    private fun openPhotoSettings() {
-        startActivity(PhotoAccess.settingsIntent(packageName))
     }
 
     private fun handleCaptureRequest() {

@@ -35,48 +35,17 @@ class SolutionOverlayService : Service() {
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
     private var solveJob: kotlinx.coroutines.Job? = null
     private var latestCaptureUri: Uri? = null
-    private var screenshotReadJob: kotlinx.coroutines.Job? = null
     private var capturePending = false
     private var captureGame = GameVariant.PAD
     private var game = GameVariant.PAD
     private var stopObservingGame: (() -> Unit)? = null
     private val toolbarPreferences by lazy { getSharedPreferences("overlay_toolbar", MODE_PRIVATE) }
     private val settingsStore by lazy { SolveSettingsStore(this) }
-    private val screenshotShortcut by lazy { ScreenshotShortcut(this) }
-    private val screenshots by lazy { ScreenshotSource(contentResolver) }
-    private var screenshotObserverRegistered = false
     private var toolbarLayoutParams: WindowManager.LayoutParams? = null
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val screenshotObserver = object : android.database.ContentObserver(handler) {
-        override fun onChange(selfChange: Boolean) {
-            handler.removeCallbacks(checkScreenshots)
-            handler.postDelayed(checkScreenshots, 600)
-        }
-    }
-    private val checkScreenshots = Runnable {
-        refreshScreenshotShortcut()
-        if (!enabled || !screenshotShortcut.canWatch(PhotoAccess.current(this))) return@Runnable
-        screenshotReadJob?.cancel()
-        val gameAtRead = game
-        screenshotReadJob = scope.launch {
-            try {
-                val image = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { screenshots.next() }
-                if (image != null && gameAtRead == game &&
-                    screenshotShortcut.canWatch(PhotoAccess.current(this@SolutionOverlayService))) solveImage(image)
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                refreshScreenshotShortcut()
-                toolbarView?.setStatus("Couldn't read the screenshot. Try Capture.", isError = true)
-                android.util.Log.w("RouteOverlay", "Screenshot observation unavailable", error)
-            }
-        }
-    }
-
-    private val refreshShortcut = object : Runnable {
+    private val checkOverlayPermission = object : Runnable {
         override fun run() {
-            refreshScreenshotShortcut()
             if ((toolbarView != null || routeView != null) && !Settings.canDrawOverlays(this@SolutionOverlayService)) {
                 stopService(Intent(this@SolutionOverlayService, ScreenCaptureService::class.java))
                 stopSelf()
@@ -86,30 +55,13 @@ class SolutionOverlayService : Service() {
         }
     }
 
-    private fun refreshScreenshotShortcut() {
-        val access = PhotoAccess.current(this)
-        val canWatch = screenshotShortcut.canWatch(access)
-        if (canWatch && !screenshotObserverRegistered) {
-            screenshotObserverRegistered = runCatching {
-                // Only watch screenshots taken after enabling this overlay session.
-                screenshots.startSession()
-                contentResolver.registerContentObserver(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, screenshotObserver)
-            }.isSuccess
-        } else if (!canWatch && screenshotObserverRegistered) {
-            contentResolver.unregisterContentObserver(screenshotObserver)
-            screenshotObserverRegistered = false
-            handler.removeCallbacks(checkScreenshots)
-            screenshotReadJob?.cancel()
-        }
-    }
-
     override fun onCreate() {
         super.onCreate()
         game = settingsStore.load().game
         stopObservingGame = settingsStore.observeGameChanges(::refreshGame)
         enabled = true
         startAsForeground()
-        handler.post(refreshShortcut)
+        handler.post(checkOverlayPermission)
     }
 
     private fun requestCapture() {
@@ -134,8 +86,6 @@ class SolutionOverlayService : Service() {
         if (selected == game) return
         game = selected
         clearRoute()
-        screenshotReadJob?.cancel()
-        handler.removeCallbacks(checkScreenshots)
         latestCaptureUri = null
         capturePending = false
         stopService(Intent(this, ScreenCaptureService::class.java))
@@ -193,10 +143,6 @@ class SolutionOverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_REFRESH_SHORTCUT -> {
-                refreshScreenshotShortcut()
-                return START_NOT_STICKY
-            }
             ACTION_ENABLE -> {
                 windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
                 showToolbar()
@@ -209,7 +155,7 @@ class SolutionOverlayService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_CAPTURE_STOPPED -> {
-                // Preserve screenshot solving and existing routes when projection ends.
+                // Keep the toolbar and existing route available when sharing ends.
                 toolbarView?.visibility = View.VISIBLE
                 if (capturePending) {
                     capturePending = false
@@ -323,7 +269,6 @@ class SolutionOverlayService : Service() {
             setStatus(game.displayName)
         }
         toolbarView = toolbar
-        refreshScreenshotShortcut()
         val toolbarParams = WindowManager.LayoutParams(
             resources.dpToPx(176),
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -359,7 +304,6 @@ class SolutionOverlayService : Service() {
         stopObservingGame?.invoke()
         stopObservingGame = null
         handler.removeCallbacksAndMessages(null)
-        if (screenshotObserverRegistered) contentResolver.unregisterContentObserver(screenshotObserver)
         scope.cancel()
         routeView?.let { runCatching { windowManager?.removeView(it) } }
         routeView = null
@@ -382,7 +326,7 @@ class SolutionOverlayService : Service() {
         val notification = NotificationCompat.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Floating toolbar")
-            .setContentText("Ready to process your screenshots or capture a board.")
+            .setContentText("Ready to capture a board.")
             .setOngoing(true)
             .addAction(R.drawable.ic_notification, "Close overlay", close)
             .build()
@@ -445,7 +389,6 @@ class SolutionOverlayService : Service() {
             private set
         const val ACTION_PROCESSING = "com.example.phoneapp.action.PROCESSING"
         const val ACTION_ENABLE = "com.example.phoneapp.action.ENABLE_OVERLAY"
-        const val ACTION_REFRESH_SHORTCUT = "com.example.phoneapp.action.REFRESH_SCREENSHOT_SHORTCUT"
         const val ACTION_CAPTURE_FAILED = "com.example.phoneapp.action.CAPTURE_FAILED"
         const val ACTION_CAPTURE_STOPPED = "com.example.phoneapp.action.CAPTURE_STOPPED"
         const val EXTRA_REQUEST_CAPTURE = "request_screen_capture"

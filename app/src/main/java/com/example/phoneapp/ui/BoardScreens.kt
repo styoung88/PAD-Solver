@@ -79,7 +79,6 @@ import com.example.phoneapp.board.RouteArrowRenderer
 import com.example.phoneapp.board.OrbColor
 import com.example.phoneapp.board.OrbModifier
 import com.example.phoneapp.capture.BoardRecognition
-import com.example.phoneapp.capture.PhotoAccess
 import com.example.phoneapp.game.GameVariant
 import com.example.phoneapp.solver.BoardSolution
 import com.example.phoneapp.solver.MatchPattern
@@ -88,24 +87,6 @@ import com.example.phoneapp.solver.OrbMovement
 import com.example.phoneapp.solver.SearchComplexity
 import com.example.phoneapp.solver.PadZeroTeamSkill
 import com.example.phoneapp.solver.comboCapacity
-
-@Composable
-internal fun PhotoAccessSettingsDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Enable screenshots") },
-        text = {
-            val permission = when {
-                android.os.Build.VERSION.SDK_INT >= 33 -> "Photos and videos"
-                android.os.Build.VERSION.SDK_INT >= 30 -> "Files and media"
-                else -> "Storage"
-            }
-            Text("To detect new screenshots, PAD Solver needs access to all photos. In Settings, tap Permissions, then $permission, and allow access to all photos. You can keep using Capture without changing this.")
-        },
-        confirmButton = { TextButton(onClick = onOpenSettings) { Text("Open Settings") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Keep using Capture") } },
-    )
-}
 
 @Composable
 internal fun OverlayPermissionDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
@@ -122,10 +103,6 @@ internal fun OverlayPermissionDialog(onOpenSettings: () -> Unit, onDismiss: () -
 internal fun HomeScreen(
     onCapture: () -> Unit,
     onChooseScreenshot: () -> Unit,
-    screenshotShortcutEnabled: Boolean,
-    photoAccess: PhotoAccess,
-    onScreenshotShortcutChanged: (Boolean) -> Unit,
-    onManagePhotoAccess: () -> Unit,
     onOpenSettings: () -> Unit = {},
     game: GameVariant = GameVariant.PAD,
 ) {
@@ -159,7 +136,7 @@ internal fun HomeScreen(
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Solve while you play", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Tap Capture in the floating toolbar, or enable screenshots below to solve screenshots you take while playing.")
+                    Text("Tap Capture in the floating toolbar to solve the board while playing.")
                     Button(onClick = onCapture, modifier = Modifier.fillMaxWidth()) { Text("Open ${game.displayName} overlay") }
                 }
             }
@@ -168,20 +145,6 @@ internal fun HomeScreen(
                     Text("Solve a saved board", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text("Pick a screenshot to review and solve. Show the route in ${game.displayName} when you’re ready.")
                     OutlinedButton(onClick = onChooseScreenshot, modifier = Modifier.fillMaxWidth()) { Text("Choose existing screenshot") }
-                }
-            }
-            Card {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Enable screenshots", style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Switch(checked = screenshotShortcutEnabled, onCheckedChange = onScreenshotShortcutChanged,
-                            modifier = Modifier.semantics { contentDescription = "Enable screenshots" })
-                    }
-                    Text("Take a screenshot while the overlay is open to solve your board.")
-                    if (screenshotShortcutEnabled && photoAccess != PhotoAccess.FULL) {
-                        TextButton(onClick = onManagePhotoAccess) { Text("Manage photo access") }
-                    }
                 }
             }
         }
