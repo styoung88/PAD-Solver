@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -148,7 +149,9 @@ internal fun HomeScreen(
                 }
             }
         }
-        TextButton(onClick = { privacyVisible.value = true }, modifier = Modifier.align(Alignment.End)) {
+        TextButton(onClick = { privacyVisible.value = true },
+            colors = ButtonDefaults.textButtonColors(contentColor = Color.Black),
+            modifier = Modifier.align(Alignment.End)) {
             Text("Privacy policy")
         }
     }
@@ -536,10 +539,11 @@ private fun SolverAppBar(onSettings: () -> Unit, enabled: Boolean) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("PAD Solver", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
         TextButton(onClick = onSettings, enabled = enabled,
+            colors = ButtonDefaults.textButtonColors(contentColor = Color.Black),
             modifier = Modifier.semantics { contentDescription = "Open solve settings" }) {
-            Icon(painterResource(R.drawable.ic_settings), contentDescription = null)
-            Spacer(Modifier.size(8.dp))
             Text("Solve settings")
+            Spacer(Modifier.size(8.dp))
+            Icon(painterResource(R.drawable.ic_settings), contentDescription = null)
         }
     }
 }
