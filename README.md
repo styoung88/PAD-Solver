@@ -48,9 +48,20 @@ See [Development workflow](docs/DEVELOPMENT.md) for build, test, and device-inst
 
 Puzzle & Dragons 0 support and remaining calibration are tracked in the [PAD 0 support checklist](docs/PAD_ZERO_SUPPORT.md).
 
+## Signed APK releases
+
+The release app is **PAD Solver**, with application ID `io.github.styoung88.padsolver`. Debug builds use the existing `com.example.phoneapp` ID and the launcher name **PAD Solver (Dev)** so both can be installed together.
+
+1. Create a private release signing keystore with Android Studio or `keytool`, and keep it outside the repository. Securely back up the keystore and credentials; reuse the same key for future updates.
+2. Copy `apk-release.properties.example` to `release.properties` and fill in the keystore path, passwords, and key alias. Use forward slashes in Windows paths. The local file is ignored by Git; `PAD_RELEASE_*` environment variables can also supply these settings.
+3. Run `.\scripts\build-apk-release.ps1`. It checks the configuration, runs unit tests and release lint, builds the APK, and verifies its signature.
+4. Attach `app/build/outputs/distribution/PAD-Solver-1.0.0.apk` and its `.sha256` checksum to a GitHub Release. Keep APKs and signing credentials out of source commits.
+
+Increment `versionCode` for each update and set the displayed `versionName` in `release.properties`. The output filename uses `versionName`. Release APK and bundle packaging require a valid signing configuration; debug builds do not.
+
 ## Before publishing
 
-- Replace the temporary application ID `com.example.phoneapp` with a unique reverse-domain ID you control. Application IDs become part of the app's identity on Google Play.
+- Keep the release application ID and signing identity consistent across updates. The temporary `com.example.phoneapp` ID is used only for debug builds.
 - Review app name, icon, privacy disclosures, permissions, and store listing.
 - Keep signing keys and passwords out of Git. Create and securely back up a release signing key before publishing.
 - This project compiles and targets API 37 (Android 17). Google Play currently requires new apps and updates to target API 36 or higher; targeting 37 opts into Android 17's target-specific behavior changes. Recheck Play's requirement before each release.
