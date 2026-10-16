@@ -1,71 +1,57 @@
-# Android-solver
+# PAD Solver
 
-A native Android app that captures and solves 5×4, 6×5, and 7×6 Puzzles & Dragons boards. It uses Kotlin and Jetpack Compose and targets the newest installed Android API.
+A native Android helper for Puzzle & Dragons (PAD) and Puzzle & Dragons 0 (PAD 0). Capture a board or choose a saved screenshot, find a suggested route, and display it over the game while you move the orb yourself.
 
-## Requirements
+## Install
 
-- Android Studio
-- Android SDK Platform 37 and Android SDK Build Tools 36.0.0
-- JDK 17 (Android Studio's bundled runtime is suitable)
-- Git
+Requires **Android 8.0 or later**.
 
-Install SDK Platform 37 and Android SDK Build Tools 36.0.0 from Android Studio's SDK Manager if they are not already installed. Open this folder in Android Studio and let it sync the Gradle project. Connect your phone with USB debugging enabled to run on your device, or create an emulator.
+1. Open [Releases](https://github.com/styoung88/PAD-Solver/releases) and download the `PAD-Solver-<version>.apk` attachment from a published release.
+2. Open the APK on your phone. If Android asks, allow the browser or file manager you used to install unknown apps, then tap **Install**.
+3. Open **PAD Solver**. Overlay and screen-sharing access are requested when you use those features.
 
-## First-version flow
+If no release is published, you can [build a debug APK from source](docs/DEVELOPMENT.md#build-from-source). For Android's installation settings, see [installing apps from other sources](https://developer.android.com/distribute/marketing-tools/alternative-distribution).
 
-1. Tap **Capture board** and approve the screen-capture and notification prompts.
-2. Switch to Puzzles & Dragons, open the notification shade, and tap **Capture board** in the ongoing capture notification.
-3. Review the detected board, then solve it. Board size is detected automatically.
-4. Tap **Show route in PAD**. If asked, grant draw-over-apps access, then tap **Show route in PAD** again to display the numbered, touch-through route overlay. No game input is automated.
+## Use the floating toolbar
 
-Each screen-capture session requires system approval. Notifications are needed for the capture action on Android 13 and later. Captured images are kept in the app's private storage and are excluded from Android backup. They are not sent over the network.
+1. Open solve settings with the gear button and choose **Game: PAD / PAD 0**, your combo target, color or match-pattern preferences, and orb movement count. PAD 0 also offers team-skill presets.
+2. Tap **Open PAD overlay** or **Open PAD 0 overlay**. If prompted, allow PAD Solver to display over other apps. The floating toolbar opens over the selected game.
+3. With a clear board visible, tap the toolbar's camera button. Approve Android's screen-sharing prompt when starting a capture session.
+4. The app reads the board, solves it, and displays the route automatically. Follow it manually, starting at green and ending at red. Capture again whenever the board changes.
 
-The floating Capture button clears the route and hides the toolbar before reading a fresh screen frame. Use **Choose existing screenshot** to review and solve a saved board with the system photo picker; no photo-library permission is needed.
+The toolbar hides while reading a fresh frame so it is not included in the capture. Use the eye button to hide or show a route, the gear button to adjust settings, and **×** to close the overlay. Stopping screen sharing through Android's controls leaves the toolbar available; the next capture asks for consent again.
 
-Choose **Game: PAD / PAD 0** in solve settings. The saved choice applies to captures, screenshots, and game-opening actions; changing it clears the previous board and route and ends screen sharing. Existing installations default to PAD. PAD 0 supports the supplied 6×5 layout, ordinary orbs, jammers, and combo-bonus badges. Each matched bonus orb adds one combo, including in cascades. Combo targets and results include these bonuses. Orb lock badges are ignored in both games.
+## Solve a saved screenshot
 
-PAD 0 offers eight saved **Team skill** presets, with **None** as the default. Team ATK multipliers affect relative damage ranking. Multicolor uses a checklist of the team's main and sub-attributes. Expert Multicolor and 5 Color Erasure require all five attack colors and have no attribute checklist. Hearts and hazards do not count as attacking attributes. **Damage reduction** optionally requires activation for skills with a separate reduction condition. Results show the team ATK multiplier, active reduction, and fixed bonus attack separately. Move-time bonuses, HP and recovery are excluded; the Orb movement count controls route length. Combo Orb appearance chance does not add speculative combos. This remains a relative estimate without creature stats, awakenings or enemy modifiers.
+1. Tap **Choose existing screenshot** and select a clear battle screenshot with the whole board visible.
+2. Review the detected orbs, open **Solve settings**, and tap **Apply and solve**.
+3. When the requirements are met, tap **Show route in PAD** or **Show route in PAD 0** to display the route over the game.
 
-The recognizer supports the five attack colors, hearts, jammers, poison, lethal poison, and bombs, plus enhanced (+) and weakened (−) markers. Ordinary orbs use color sampling, hazards use artwork references, and modifiers use separate visual checks; additional device captures and orb skins still need calibration. Uncertain captures ask for a new capture. Hazards match and contribute combos, but poison damage and bomb explosions are not modeled. The board-only color-damage estimate includes the 6% per remaining enhanced orb bonus and weakened-orb penalties after enhancement cancellation; it excludes team awakenings and other team or enemy modifiers. See [orb references and supported rules](docs/ORB_REFERENCES.md).
+Changing games clears the current board and route and ends screen sharing. Each game keeps its own solve preferences.
 
-The solver uses a bounded beam search with deterministic gravity cascades and no random skyfall. Combo minimums, attacking-color pattern requirements and enabled damage reduction must be met first. Qualifying routes maximize the selected color's relative damage, or total combos when no color or team skill is selected. With a PAD 0 team skill and no color focus, attacking colors have equal damage weight. A pattern requirement means at least one match, rather than maximizing pattern count. Score ties prefer fewer moves, then fewer turns. Pattern progress guides the search frontier but does not rank final solutions. Requests proven impossible by orb inventory or board space return immediately for adjustment.
+## Supported boards and limits
 
-Color-focused solves run two bounded searches concurrently, independently of the selected combo minimum, then share their candidates. An additional search targets the requested requirements if needed. Equal results remain deterministic across workers. Search limits are 30 moves for 5×4, 40 for 6×5, and 50 for 7×6. Row patterns span the full board width. The solver does not use the in-game timer and does not guarantee a global optimum.
+- PAD: 5×4, 6×5, and 7×6 boards; five attack colors, hearts, hazards, and enhanced/weakened markers.
+- PAD 0: calibrated 6×5 boards, ordinary orbs, hearts, jammers, combo-bonus badges, and eight team-skill presets. See [PAD 0 support and remaining checks](docs/PAD_ZERO_SUPPORT.md).
+- Recognition depends on board layout, artwork, and image quality. Unclear boards ask for another capture; additional layouts and orb skins may need calibration.
+- The solver models deterministic cascades with no random skyfall and uses a bounded search. It does not guarantee the best possible route or model the in-game timer.
+- Damage is a relative board estimate. Creature stats, awakenings, enemy effects, healing, poison damage, and bomb explosions are not modeled. Lock badges are ignored.
 
-## Project structure
+The overlay displays instructions without automating game input. Solver rules and implementation details are described in [Project architecture and solver behavior](docs/PROJECT_NOTES.md).
 
-```text
-app/                  Android application module
-  src/main/java/      Kotlin source
-  src/main/res/       Android resources
-  src/main/AndroidManifest.xml
-  src/androidTest/    Instrumentation tests and test-only screenshot fixtures
-docs/                 Project notes and decisions
-.vscode/              Optional editor recommendations
-```
+## Privacy
 
-See [Development workflow](docs/DEVELOPMENT.md) for build, test, and device-install instructions.
+Board images are processed on the device. The app has no accounts, advertising, analytics, or network uploads. The screenshot picker only reads the image you select and needs no photo-library permission. Captures stay in private app storage and are excluded from backup; solve preferences can be backed up by Android.
 
-Puzzle & Dragons 0 support and remaining calibration are tracked in the [PAD 0 support checklist](docs/PAD_ZERO_SUPPORT.md).
+Notification permission is not required to use the toolbar or capture a board. On Android 13 and later, allowing notifications makes the ongoing service notifications visible in the notification drawer. See the [included privacy policy](app/src/main/res/raw/privacy_policy.txt) for storage, backup, and deletion details.
 
-## Signed APK releases
+## Development and feedback
 
-The release app is **PAD Solver**, with application ID `io.github.styoung88.padsolver`. Debug builds use the existing `com.example.phoneapp` ID and the launcher name **PAD Solver (Dev)** so both can be installed together.
+- [Build, test, install, and create signed APKs](docs/DEVELOPMENT.md)
+- [Contribution and commit guidelines](CONTRIBUTING.md)
+- [Report a bug or request a feature](https://github.com/styoung88/PAD-Solver/issues)
+- [Orb reference sources and recognition rules](docs/ORB_REFERENCES.md)
 
-1. Create a private release signing keystore with Android Studio or `keytool`, and keep it outside the repository. Securely back up the keystore and credentials; reuse the same key for future updates.
-2. Copy `apk-release.properties.example` to `release.properties` and fill in the keystore path, passwords, and key alias. Use forward slashes in Windows paths. The local file is ignored by Git; `PAD_RELEASE_*` environment variables can also supply these settings.
-3. Run `.\scripts\build-apk-release.ps1`. It checks the configuration, runs unit tests and release lint, builds the APK, and verifies its signature.
-4. Attach `app/build/outputs/distribution/PAD-Solver-1.0.0.apk` and its `.sha256` checksum to a GitHub Release. Keep APKs and signing credentials out of source commits.
+The app is written in Kotlin with Jetpack Compose. Release installations are named **PAD Solver**; debug installations are named **PAD Solver (Dev)** and use a separate application ID so both can be installed together.
 
-Increment `versionCode` for each update and set the displayed `versionName` in `release.properties`. The output filename uses `versionName`. Release APK and bundle packaging require a valid signing configuration; debug builds do not.
-
-## Before publishing
-
-- Keep the release application ID and signing identity consistent across updates. The temporary `com.example.phoneapp` ID is used only for debug builds.
-- Review app name, icon, privacy disclosures, permissions, and store listing.
-- Keep signing keys and passwords out of Git. Create and securely back up a release signing key before publishing.
-- This project compiles and targets API 37 (Android 17). Google Play currently requires new apps and updates to target API 36 or higher; targeting 37 opts into Android 17's target-specific behavior changes. Recheck Play's requirement before each release.
-
-## Git
-
-Start each feature by creating a dedicated branch from an up-to-date `main`, using the `codex/` prefix unless another name is requested. Use Conventional Commit messages. When a feature is complete, commit it and push and merge it before starting the next feature. A request to merge includes cleanup: after pushing the merge to `main`, delete the fully merged feature branch locally and on the remote, then finish on `main`. Preserve uncommitted work. Do not commit `local.properties`, build outputs, or signing credentials.
+Puzzle & Dragons artwork belongs to its respective owners. Reference-image provenance is documented in the linked recognition notes and [test fixture notes](app/src/androidTest/assets/README.md).

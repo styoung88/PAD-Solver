@@ -1,10 +1,10 @@
-# PAD 0 support checklist
+# PAD 0 support
 
-Add support in stages: game selection, shared recognition classes, board geometry and orb artwork, combo-bonus orbs, then PAD 0 team skills. Keep the existing PAD behavior covered throughout.
+PAD 0 supports game selection, the reference 6×5 board layout, ordinary orbs, hearts, jammers, combo-bonus badges, and eight team-skill presets. The checklist below records the supported implementation and the remaining live-game checks.
 
-The reported differences are board dimensions or placement, hazard artwork (especially jammers), orb modifiers that add combos when matched, and a small set of team skills. Confirm the exact geometry and rules from PAD 0 captures before implementing them.
+Geometry and artwork calibration are based on the committed reference captures. Additional layouts, hazards, and modifiers need their own reference captures before support is added.
 
-## 1. Select the game
+## Game selection
 
 - [x] Add a saved **Game: PAD / PAD 0** choice, defaulting existing installations to PAD.
 - [x] Use that selection to choose the recognition flow; keep grid size detection independent of game selection.
@@ -13,11 +13,9 @@ The reported differences are board dimensions or placement, hazard artwork (espe
 
 The player's choice is authoritative. Both choices remain available without installed-game discovery, foreground-app inference, or image-based game identification.
 
-Done when every capture/solve flow consistently uses the manually selected game.
-
 Both game choices support capture, solving, and route display for their calibrated layouts.
 
-## 2. Extract shared recognition classes
+## Shared recognition classes
 
 - [x] Extract a `BaseBoardRecognizer` with the common recognition flow: image preparation, candidate evaluation, grid fitting, cell sampling, uncertainty handling, and construction of `BoardRecognition`.
 - [x] Keep PAD-specific geometry in `PadBoardRecognizer`; add `PadZeroBoardRecognizer` for PAD 0. Children provide supported sizes, layout/search parameters, and narrow overrides where the geometry algorithm actually differs.
@@ -42,44 +40,36 @@ Keep both hierarchies shallow. Shared algorithms stay in the base classes; simpl
 
 `BoardGeometry` supplies layout/search calibration, and `OrbSamplingParameters` supplies sampling positions and confidence requirements. `HazardSymbolMatcher` uses variant references in `PadHazardTemplates` and `PadZeroOrbReferences`. Each child supplies its own geometry, palette, hazards, and markers. Ordinary orb recognition uses color sampling exclusively.
 
-Done when existing PAD recognition uses the shared bases without changing its results, and callers can select a variant through the common API.
+## Board geometry
 
-## 3. Recognize the board geometry
-
-- [x] Annotate the supplied full battle screenshots with grid size, outer bounds, and cell centers.
+- [x] Annotate the reference battle screenshots with grid size, outer bounds, and cell centers.
 - [x] Measure the layout differences; support the confirmed 6×5 size.
 - [x] Configure PAD 0 geometry, including inset edges and bright grid lines. Fit row and column pitch independently.
 - [x] Verify saved screenshot recognition and rendered route corners at multiple capture/display scales on the phone.
 - [ ] Verify alignment over a live PAD 0 battle through screen sharing. Collect additional layouts or board-size effects when observed.
 
-The supplied 574×1280 captures have approximate board bounds `(10, 810)–(563, 1270)`, horizontal pitch 92.2 px and vertical pitch 92 px. Fixture annotations are in `app/src/androidTest/assets/pad-zero/annotations.json`.
+The 574×1280 reference captures have approximate board bounds `(10, 810)–(563, 1270)`, horizontal pitch 92.2 px and vertical pitch 92 px. Fixture annotations are in `app/src/androidTest/assets/pad-zero/annotations.json`.
 
-Done when ordinary PAD 0 boards are recognized with accurate cell centers and the displayed route stays aligned.
+## Orb artwork and hazards
 
-## 4. Recognize orb artwork and hazards
-
-- [x] Label ordinary orbs, hearts, jammers, and combo-bonus badges from the supplied captures.
+- [x] Label ordinary orbs, hearts, jammers, and combo-bonus badges from the reference captures.
 - [x] Add PAD 0 artwork references, thresholds, and marker detection using the shared recognition flow.
 - [x] Recognize combo bonuses independently of base color. Ignore lock badges because they do not affect matching or damage.
 - [x] Display hazards/modifiers in board review and reject unclear color/grid evidence; cover both games with image fixtures. Ordinary orbs use color sampling; artwork comparisons distinguish hazards and modifier badges.
 
 Other PAD 0 hazards and modifiers need their own reference captures before support is added.
 
-Done when the supported PAD 0 orb types and markers are distinguishable, with uncertain images rejected for recapture.
+## Combo-bonus orbs
 
-## 5. Model combo-bonus orbs
-
-- [x] Confirm +1 combo per marked orb included in a match, as specified by the user. Leader-specific caps and conditions belong to phase 6.
+- [x] Add one combo per marked orb included in a match. Team-skill conditions are described below.
 - [x] Preserve bonus flags through swaps, gravity, and solver cache keys.
 - [x] Track physical matches and bonus combos separately; count each cleared marker once and leave unmatched markers inactive.
 - [x] Include bonuses in combo objectives, minimums, inventory bounds, settings, results, overlays, and the existing relative damage estimate. Keep pattern checks tied to physical matches.
 - [x] Cover multiple marked orbs, separate matches, cascades, and targets reachable only through bonuses.
 
-Done when routes that consume bonus orbs are scored correctly and valid combo targets are not rejected by the old physical-match limit.
+## Team skills and route scoring
 
-## 6. Include PAD 0 team skills in route scoring
-
-- [x] Record the eight supplied team skills from the team-screen descriptions.
+- [x] Record the eight modeled team skills from the reference team-screen descriptions.
 - [x] Add a saved PAD 0 **Team skill** preset selector with **None** as the default. Keep team attacking attributes separate from matched orb colors.
 - [x] Separate game-specific damage rules from match analysis. Use effective combos for damage and combo-based skill activation; preserve PAD's existing board-only estimate.
 - [x] Evaluate conditional team attack multipliers during route ranking. Carry the same configuration into manual and automatic overlay solves.
@@ -91,7 +81,7 @@ Exclude time-remaining bonuses from route scoring; use the existing **Orb moveme
 
 `DamageEvaluator` shares the board contribution; `PadDamageEvaluator` retains PAD's estimate, and `PadZeroDamageEvaluator` applies the selected team skill. Tiered multipliers use the highest qualifying tier; independent clauses multiply. With a skill selected and no color focus, sum attacking-color contributions with equal weights. Multicolor restricts these colors to the configured team attributes.
 
-Rules modeled from the supplied descriptions:
+Rules modeled from the reference descriptions:
 
 | Preset | ATK condition (excluding time) | Damage reduction | Fixed bonus attack |
 | --- | --- | --- | --- |
@@ -106,8 +96,6 @@ Rules modeled from the supplied descriptions:
 
 Count matched attacking attributes across the resolved turn. Multicolor intersects these with configured team coverage; Expert Multicolor and 5 Color Erasure always require all five attack colors and ignore saved attribute selections. Hearts/hazards never add an attacking attribute. Linked-orb conditions use the largest single cleared group of any orb type, rather than combining separate groups. Cascade and linked-group interpretations still need live-game comparison. Bonus combos affect combo conditions only.
 
-Done when the selected team skill and optional damage reduction requirement affect route selection consistently across capture flows.
-
 ## Existing code entry points
 
 | Area | Files |
@@ -119,4 +107,4 @@ Done when the selected team skill and optional damage reduction requirement affe
 | Orb state, clears, cascades | `board/Board.kt`, `board/BoardAnalyzer.kt`, `solver/BoardSolver.kt` |
 | Combo limits, objectives, damage | `solver/SolveGoal.kt`, `solver/DamageEvaluator.kt`, `solver/PadZeroTeamSkill.kt`, `solver/SolveSettings.kt`, `ui/BoardScreens.kt` |
 
-Each app stage needs focused regression checks for both games and a debug build installed with `scripts/install-debug-to-device.ps1`, following [the development workflow](DEVELOPMENT.md).
+Changes to game-specific recognition or scoring should include regression checks for both games and a device check, following [the development workflow](DEVELOPMENT.md).
