@@ -48,15 +48,19 @@ class BoardSolverPerformanceTest {
     @Test fun combosOnlyControl() = compare("combos_control", woodBoard(), SolveSettings())
     @Test fun smallBoard() = compare("5x4_30_moves", sizedBoard(BoardSize.SMALL), SolveSettings(OrbColor.FIRE))
     @Test fun largeBoard() = compare("7x6_50_moves", sizedBoard(BoardSize.LARGE), SolveSettings(OrbColor.FIRE))
+    @Test fun sparseWaterBoard() = compare("7x6_sparse_water_50_moves", reportedSparseWaterBoard(), SolveSettings(OrbColor.WATER))
+    @Test fun sparseWaterBoardExtended() = compare("7x6_sparse_water_200_moves", reportedSparseWaterBoard(),
+        SolveSettings(OrbColor.WATER), maxOrbMoves = 200)
 
     private fun sizedBoard(size: BoardSize): Board = Board(size.columns, size.rows,
         List(size.cellCount) { Orb(OrbColor.entries[it % 6]) }.shuffled(Random(37)))
 
-    private fun compare(name: String, board: Board, settings: SolveSettings): Unit = runBlocking {
+    private fun compare(name: String, board: Board, settings: SolveSettings, maxOrbMoves: Int? = null): Unit = runBlocking {
         // The same algorithm and cache run on one worker or the default CPU pool.
         // This isolates parallel execution without a benchmark switch in product settings.
         val solvers = listOf(BoardSolver(Dispatchers.Default.limitedParallelism(1)), BoardSolver())
-        val options = SolveOptions.forBoard(board, settings.toGoal())
+        val baseline = SolveOptions.forBoard(board, settings.toGoal())
+        val options = baseline.copy(maxOrbMoves = maxOrbMoves ?: baseline.maxOrbMoves)
         val expected = solvers[0].solve(board, options)
         assertEquals(expected, solvers[1].solve(board, options))
         val samples = List(2) { mutableListOf<Long>() }
@@ -73,8 +77,21 @@ class BoardSolverPerformanceTest {
             }
         }
         Log.i("SolverParallelTiming", "SUMMARY variant=whole_pass case=$name serialMedianMs=${samples[0].sorted()[2]} " +
-            "parallelMedianMs=${samples[1].sorted()[2]} serialSamples=${samples[0]} parallelSamples=${samples[1]}")
+            "parallelMedianMs=${samples[1].sorted()[2]} serialSamples=${samples[0]} parallelSamples=${samples[1]} " +
+            "combos=${expected.comboCount} moves=${expected.orbMoves}")
     }
+
+    private fun reportedSparseWaterBoard(): Board = Board(7, 6,
+        ("FLHDDFG" + "FGDLDFL" + "WFLHLWG" + "LHHGWHD" + "WFLHFLG" + "GHLFGFL")
+            .mapIndexed { index, color -> Orb(when (color) {
+                'F' -> OrbColor.FIRE
+                'L' -> OrbColor.LIGHT
+                'H' -> OrbColor.HEART
+                'D' -> OrbColor.DARK
+                'G' -> OrbColor.WOOD
+                'W' -> OrbColor.WATER
+                else -> error("Unknown fixture color")
+            }, if (index in setOf(2, 26)) setOf(OrbModifier.ENHANCED) else emptySet()) })
 
     private fun darkBoard(): Board {
         val enhanced = setOf(0, 3, 4, 5, 6, 8, 9, 10, 11, 12, 15, 17, 20, 21, 29)
