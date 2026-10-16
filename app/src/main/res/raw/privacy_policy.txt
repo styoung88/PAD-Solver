@@ -1,5 +1,5 @@
 PAD Solver Privacy Policy
-Updated October 14, 2026
+Updated October 16, 2026
 
 PAD Solver processes board images on your device to recognize orbs and calculate routes. It has no accounts, advertising, analytics, or network uploads.
 
@@ -14,6 +14,3 @@ The most recent screen capture is stored in private app storage and replaced by 
 
 Sharing and security
 PAD Solver does not send images, board data, app lists, or preferences to the developer or third parties. Android permissions and private app storage protect access. Android and Google Play may process information independently under their own policies.
-
-Contact
-A public developer privacy contact will be added before distribution. This local preparation build is not ready for Play submission until that contact and a public policy URL are configured.
