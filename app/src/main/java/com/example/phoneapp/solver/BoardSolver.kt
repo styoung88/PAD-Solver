@@ -220,17 +220,18 @@ class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Defa
         return if (pairs != 0) pairs else compareRoute(left.state, right.state)
     }
 
-    /** Reserve alternatives by each strategy's fulfillment, independent of the user's combo cutoff. */
+    /** Keep different starting orbs and unmet requirements from disappearing behind early matches. */
     private fun selectBeam(candidates: Collection<RankedState>, beamWidth: Int, strategy: Int): List<RankedState> {
         val ranked = candidates.sortedWith { left, right -> compareSearch(left, right, strategy) }
-        if (ranked.size <= beamWidth || beamWidth < FRONTIER_DIVISOR) return ranked.take(beamWidth)
+        if (ranked.size <= beamWidth || beamWidth < MIN_DIVERSE_BEAM_WIDTH) return ranked.take(beamWidth)
+        val starts = ranked.groupBy { it.state.path[0] }.values.map { it.iterator() }
         val frontiers = ranked.filterNot { it.evaluation.searchScores[strategy].satisfied }
             .groupBy { it.evaluation.searchScores[strategy].requirements.map(RequirementEvaluation::satisfied) }
-            .values.map { it.iterator() }
-        if (frontiers.isEmpty()) return ranked.take(beamWidth)
+            .values.map { it.iterator() } + starts
 
         val selected = LinkedHashSet<RankedState>(beamWidth)
-        selected += ranked.take(beamWidth - beamWidth / FRONTIER_DIVISOR)
+        // Allocate slots across starting orbs, retaining goal order within each group.
+        // A single early match must not consume the beam before other starts can develop.
         while (selected.size < beamWidth) {
             var added = false
             for (frontier in frontiers) {
@@ -334,7 +335,7 @@ class BoardSolver(private val dispatcher: CoroutineDispatcher = Dispatchers.Defa
         const val ENHANCED_BIT = 1 shl 5
         const val WEAKENED_BIT = 1 shl 6
         const val COMBO_BONUS_BIT = 1 shl 7
-        const val FRONTIER_DIVISOR = 4
+        const val MIN_DIVERSE_BEAM_WIDTH = 4
         const val EVALUATION_CACHE_SIZE = 1024
     }
 }
