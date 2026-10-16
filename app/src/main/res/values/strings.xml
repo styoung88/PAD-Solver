@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">PAD Solver</string>
+    <string name="launcher_app_name">@string/app_name</string>
 </resources>

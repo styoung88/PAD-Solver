@@ -11,8 +11,9 @@ val releaseSettings = Properties().apply {
 }
 fun releaseSetting(key: String): String? =
     System.getenv("PAD_RELEASE_${key.replace(Regex("([a-z])([A-Z])"), "$1_$2").uppercase()}")
+        ?.takeIf { it.isNotBlank() }
         ?: releaseSettings.getProperty(key)?.takeIf { it.isNotBlank() }
-val releaseApplicationId = releaseSetting("applicationId")
+val releaseApplicationId = releaseSetting("applicationId") ?: "io.github.styoung88.padsolver"
 val releaseStoreFile = releaseSetting("storeFile")
 val releaseStorePassword = releaseSetting("storePassword")
 val releaseKeyAlias = releaseSetting("keyAlias")
@@ -28,12 +29,12 @@ android {
         minSdk = 26
         targetSdk = 37
         versionCode = releaseSetting("versionCode")?.toInt() ?: 1
-        versionName = releaseSetting("versionName") ?: "1.0"
+        versionName = releaseSetting("versionName") ?: "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
-        if (signingReady) create("upload") {
+        if (signingReady) create("release") {
             storeFile = rootProject.file(releaseStoreFile!!)
             storePassword = releaseStorePassword
             keyAlias = releaseKeyAlias
@@ -45,7 +46,7 @@ android {
             isDebuggable = false
             // Keep release behavior identical while the first closed test is validated.
             isMinifyEnabled = false
-            if (signingReady) signingConfig = signingConfigs.getByName("upload")
+            if (signingReady) signingConfig = signingConfigs.getByName("release")
         }
     }
     buildFeatures { compose = true }
@@ -57,23 +58,25 @@ android {
 
 androidComponents {
     onVariants(selector().withBuildType("release")) { variant ->
-        releaseApplicationId?.let { variant.applicationId.set(it) }
+        variant.applicationId.set(releaseApplicationId)
     }
 }
 
-val validatePlayRelease = tasks.register("validatePlayRelease") {
+val validateRelease = tasks.register("validateRelease") {
     doLast {
-        check(releaseApplicationId != null && releaseApplicationId != "com.example.phoneapp" &&
+        check(releaseApplicationId != "com.example.phoneapp" &&
             releaseApplicationId.matches(Regex("[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+"))) {
-            "Set a permanent applicationId in release.properties before creating a Play bundle."
+            "Set a permanent applicationId in release.properties before creating a release."
         }
         check((releaseSetting("versionCode")?.toIntOrNull() ?: 1) > 0) { "versionCode must be positive." }
-        check(signingReady) { "Configure upload signing in release.properties or PAD_RELEASE_* environment variables." }
-        check(rootProject.file(releaseStoreFile!!).isFile) { "Upload keystore file does not exist." }
+        check(signingReady) { "Configure release signing in release.properties or PAD_RELEASE_* environment variables." }
+        check(rootProject.file(releaseStoreFile!!).isFile) { "Release keystore file does not exist." }
     }
 }
-// APK assembly remains available for unsigned local validation; Play bundles fail closed.
-tasks.matching { it.name == "bundleRelease" }.configureEach { dependsOn(validatePlayRelease) }
+tasks.register("validatePlayRelease") { dependsOn(validateRelease) }
+// Fail before packaging an unsigned distributable APK or bundle.
+tasks.matching { it.name in setOf("assembleRelease", "packageRelease", "bundleRelease") }
+    .configureEach { dependsOn(validateRelease) }
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")

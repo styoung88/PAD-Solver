@@ -1,0 +1,10 @@
+# Copy to release.properties (ignored). Never commit real credentials.
+# Keep this application ID and signing key for future updates.
+applicationId=io.github.styoung88.padsolver
+versionCode=1
+versionName=1.0.0
+# Use an absolute path outside the repository, with forward slashes on Windows.
+storeFile=
+storePassword=
+keyAlias=pad-solver
+keyPassword=
