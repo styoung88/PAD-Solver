@@ -12,4 +12,8 @@ When the user requests merging a branch, include branch cleanup as part of the r
 
 After changes that affect the app, always build and install the updated debug app on the user's connected phone using `scripts/install-debug-to-device.ps1`. The user has authorized these routine device updates; do not ask for confirmation each time. Report whether installation succeeded. If the phone is disconnected or unauthorized, report the blocker. If multiple physical devices are connected, ask which phone to use.
 
+Before reporting no connected phone, check `adb devices -l` and `adb mdns services` for a paired wireless device, connect its debugging endpoint, and retry. Ask for the pairing endpoint and code only if pairing is required.
+
+After pushing, do not wait for CI to finish; the user will report its result.
+
 See `docs/DEVELOPMENT.md` for build and installation details.
